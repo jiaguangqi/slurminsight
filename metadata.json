@@ -1,0 +1,5 @@
+{
+  "name": "SlurmClusterInsight",
+  "description": "A high-performance dashboard for monitoring Slurm cluster resource utilization, featuring persistent historical data, real-time CPU/GPU tracking, and interactive utilization charts.",
+  "requestFramePermissions": []
+}
