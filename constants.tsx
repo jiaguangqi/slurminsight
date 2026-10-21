@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, History, Settings, Grid3X3, ListTodo } from 'lucide-react';
+import { LayoutDashboard, History, Settings, Grid3X3, ListTodo, ShieldCheck } from 'lucide-react';
 
 export const FETCH_INTERVAL_MS = 300000; // 5 minutes
 export const STORAGE_KEY = 'slurm_monitor_history_v1';
@@ -10,6 +10,7 @@ export const NAVIGATION_ITEMS = [
   { id: 'heatmap', label: 'Node Heatmap', icon: <Grid3X3 size={20} /> },
   { id: 'jobs', label: 'Job Queue', icon: <ListTodo size={20} /> },
   { id: 'history', label: 'History Trends', icon: <History size={20} /> },
+  { id: 'services', label: 'Service Health', icon: <ShieldCheck size={20} /> },
   { id: 'settings', label: 'Configuration', icon: <Settings size={20} /> },
 ];
 

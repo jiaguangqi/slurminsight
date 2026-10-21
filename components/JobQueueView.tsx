@@ -1,7 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { JobInfo, JobState } from '../types';
-import { Search, Hash, User, Layers, PlayCircle, Clock, AlertCircle, Eye, X, Terminal, MapPin, Box, Calendar } from 'lucide-react';
+import { Search, Hash, User, Layers, PlayCircle, Clock, AlertCircle, Eye, X, Terminal, MapPin, Box, Calendar, RefreshCw, FileText } from 'lucide-react';
+import { slurmService, JobLogPayload } from '../services/slurmService.ts';
+import JobUsagePanel from './JobUsagePanel.tsx';
 
 interface JobQueueViewProps {
   jobs: JobInfo[];
@@ -18,12 +20,38 @@ const STATE_COLORS: Record<JobState, string> = {
   SUSPENDED: 'text-rose-600 bg-rose-50 border-rose-100'
 };
 
+const stateColor = (state: JobState | string) =>
+  STATE_COLORS[state as JobState] || 'text-slate-500 bg-slate-50 border-slate-200';
+
+const formatBytes = (bytes: number) => {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [groupBy, setGroupBy] = useState<GroupBy>('all');
   const [sortBy, setSortBy] = useState<SortBy>('jobId');
   const [selectedJob, setSelectedJob] = useState<JobInfo | null>(null);
+  const [jobScript, setJobScript] = useState('');
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const [scriptCache, setScriptCache] = useState<Record<string, string>>({});
+  const selectedJobId = selectedJob?.jobId;
+  const cachedScript = selectedJobId ? scriptCache[selectedJobId] : undefined;
+
+  // 'usage' shows live resource consumption, 'out'/'err' show job logs.
+  const [panel, setPanel] = useState<'usage' | 'out' | 'err'>('usage');
+  const logStream = panel === 'usage' ? null : panel;
+  const [logData, setLogData] = useState<JobLogPayload | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const logRef = useRef<HTMLPreElement>(null);
+  const logRequestRef = useRef(0);
 
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
@@ -64,6 +92,87 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
       jobs: groups[key]
     }));
   }, [filteredJobs, groupBy, sortBy]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedJobId) {
+      setJobScript('');
+      setScriptError(null);
+      setScriptLoading(false);
+      return;
+    }
+
+    if (cachedScript !== undefined) {
+      setJobScript(cachedScript);
+      setScriptError(null);
+      return;
+    }
+
+    setScriptLoading(true);
+    setScriptError(null);
+    slurmService.fetchJobScript(selectedJobId)
+      .then((script) => {
+        if (cancelled) return;
+        setJobScript(script || '');
+        setScriptCache((prev) => ({ ...prev, [selectedJobId]: script || '' }));
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setScriptError(err?.message || '无法获取作业脚本');
+        setJobScript('');
+      })
+      .finally(() => {
+        if (!cancelled) setScriptLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedJobId, cachedScript]);
+
+  const loadJobLog = useCallback(async (jobId: string, stream: 'out' | 'err', silent = false) => {
+    const requestId = ++logRequestRef.current;
+    if (!silent) setLogLoading(true);
+    try {
+      const payload = await slurmService.fetchJobLog(jobId, stream);
+      if (logRequestRef.current !== requestId) return;
+      setLogData(payload);
+      setLogError(null);
+    } catch (err: any) {
+      if (logRequestRef.current !== requestId) return;
+      setLogError(err?.message || '读取日志失败');
+    } finally {
+      if (logRequestRef.current === requestId) setLogLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setPanel('usage');
+    setLogData(null);
+    setLogError(null);
+    setLogLoading(false);
+  }, [selectedJobId]);
+
+  useEffect(() => {
+    if (!selectedJobId || !logStream) return;
+    loadJobLog(selectedJobId, logStream);
+    if (!autoRefresh) return;
+    const timer = setInterval(() => loadJobLog(selectedJobId, logStream, true), 5000);
+    return () => clearInterval(timer);
+  }, [selectedJobId, logStream, autoRefresh, loadJobLog]);
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [logData]);
+
+  const selectPanel = (next: 'usage' | 'out' | 'err') => {
+    if (next !== panel && next !== 'usage') {
+      setLogData(null);
+      setLogError(null);
+    }
+    setPanel(next);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24 relative">
@@ -189,7 +298,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-black border ${STATE_COLORS[job.state]}`}>
+                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-black border ${stateColor(job.state)}`}>
                           {job.state === 'RUNNING' ? <PlayCircle size={12} /> : job.state === 'PENDING' ? <Clock size={12} /> : <AlertCircle size={12} />}
                           {job.state}
                         </div>
@@ -238,7 +347,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
       {/* Detail Modal */}
       {selectedJob && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 border border-slate-200">
+          <div className="bg-white w-full max-w-6xl h-[88vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 border border-slate-200">
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-2xl ${selectedJob.state === 'RUNNING' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
@@ -257,28 +366,109 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
               </button>
             </div>
 
-            <div className="p-8 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
-                <DetailRow label="作业名" value={selectedJob.name} />
-                <DetailRow label="作业ID" value={selectedJob.jobId} />
-                <DetailRow label="用户名" value={selectedJob.user} />
-                <DetailRow label="作业状态" value={selectedJob.state} isStatus status={selectedJob.state} />
-                <DetailRow label="申请资源" value={selectedJob.reqTres || 'N/A'} isFullWidth />
-                <DetailRow label="运行节点" value={selectedJob.nodelist || 'Pending...'} />
-                <DetailRow label="提交时间" value={selectedJob.submitTime || 'N/A'} />
-                <DetailRow label="运行时间" value={selectedJob.time} />
-                <DetailRow label="退出时间" value={selectedJob.endTime || 'Unknown'} />
-                <DetailRow label="工作目录" value={selectedJob.workDir || 'N/A'} isFullWidth isCode />
+            <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+              <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-8 flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 shrink-0">
+                  <DetailRow label="作业名" value={selectedJob.name} />
+                  <DetailRow label="作业ID" value={selectedJob.jobId} />
+                  <DetailRow label="用户名" value={selectedJob.user} />
+                  <DetailRow label="作业状态" value={selectedJob.state} isStatus status={selectedJob.state} />
+                  <DetailRow label="申请资源" value={selectedJob.reqTres || 'N/A'} isFullWidth />
+                  <DetailRow label="运行节点" value={selectedJob.nodelist || 'Pending...'} />
+                  <DetailRow label="提交时间" value={selectedJob.submitTime || 'N/A'} />
+                  <DetailRow label="运行时间" value={selectedJob.time} />
+                  <DetailRow label="退出时间" value={selectedJob.endTime || 'Unknown'} />
+                  <DetailRow label="工作目录" value={selectedJob.workDir || 'N/A'} isFullWidth isCode />
+                </div>
+                <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between shrink-0">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">作业脚本</span>
+                    {scriptLoading && <span className="text-[11px] font-black text-blue-600">加载中...</span>}
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex-1 min-h-[10rem] overflow-y-auto">
+                    {scriptError ? (
+                      <span className="text-xs font-bold text-rose-600">获取失败：{scriptError}</span>
+                    ) : (
+                      <pre className="whitespace-pre-wrap break-words text-[11px] font-mono text-slate-700 leading-relaxed">{jobScript || '暂无脚本信息'}</pre>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="px-8 py-5 bg-slate-900 flex justify-end">
-              <button 
-                onClick={() => setSelectedJob(null)}
-                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-black transition-all"
-              >
-                Close
-              </button>
+              {/* Log viewer */}
+              <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[520px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-950">
+                <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
+                  <FileText size={14} className="text-slate-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">作业监控</span>
+                  <div className="ml-auto flex bg-slate-900 rounded-lg p-0.5">
+                    <button
+                      onClick={() => selectPanel('usage')}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'usage' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      资源使用
+                    </button>
+                    <button
+                      onClick={() => selectPanel('out')}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'out' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      输出 .out
+                    </button>
+                    <button
+                      onClick={() => selectPanel('err')}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'err' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      错误 .err
+                    </button>
+                  </div>
+                </div>
+
+                {panel === 'usage' && selectedJobId ? (
+                  <JobUsagePanel jobId={selectedJobId} requestedGpus={selectedJob.gpus || 0} />
+                ) : logStream ? (
+                  <>
+                    <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-800 shrink-0">
+                      <button
+                        onClick={() => selectedJobId && loadJobLog(selectedJobId, logStream)}
+                        disabled={logLoading}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 text-[11px] font-black hover:bg-slate-700 disabled:opacity-60"
+                      >
+                        <RefreshCw size={11} className={logLoading ? 'animate-spin' : ''} />
+                        刷新
+                      </button>
+                      <button
+                        onClick={() => setAutoRefresh((value) => !value)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black transition-all ${autoRefresh ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}
+                        title="每 5 秒自动刷新"
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                        自动 5s
+                      </button>
+                      <span className="ml-auto text-[10px] font-mono text-slate-500">
+                        {logData ? `${formatBytes(logData.size)}${logData.truncated ? ' · 尾部' : ''}` : ''}
+                      </span>
+                    </div>
+                    <pre
+                      ref={logRef}
+                      className="flex-1 min-h-0 overflow-auto p-4 text-[11px] leading-relaxed font-mono text-slate-200 whitespace-pre-wrap break-words"
+                    >
+                      {logError
+                        ? `读取失败：${logError}`
+                        : logData
+                          ? (logData.exists ? (logData.content || '（文件为空）') : '（日志文件尚未生成）')
+                          : '加载中…'}
+                    </pre>
+                    <div className="px-4 py-2 border-t border-slate-800 text-[10px] font-mono text-slate-600 truncate shrink-0" title={logData?.path || ''}>
+                      {logData?.path || '—'}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500 px-6 text-center">
+                    <Terminal size={28} className="text-slate-700" />
+                    <p className="text-xs font-black">选择一个日志查看</p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">输出日志 / 错误日志，打开后每 5 秒自动刷新，也可手动刷新。</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -291,7 +481,7 @@ const DetailRow: React.FC<{ label: string; value: string; isFullWidth?: boolean;
   <div className={`${isFullWidth ? 'col-span-full' : ''} flex flex-col gap-1`}>
     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}：</span>
     {isStatus && status ? (
-      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black border w-fit ${STATE_COLORS[status]}`}>
+      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black border w-fit ${stateColor(status)}`}>
         {value}
       </div>
     ) : isCode ? (

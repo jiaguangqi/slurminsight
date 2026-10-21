@@ -2,14 +2,34 @@
 import React from 'react';
 import { NAVIGATION_ITEMS } from '../constants.tsx';
 import { Server, Activity, Terminal } from 'lucide-react';
+import { ControllerStatus } from '../types';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (id: string) => void;
   allowedMenus?: string[] | null;
+  controllers?: ControllerStatus[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, allowedMenus }) => {
+const roleLabel = (role: string) => {
+  if (role === 'primary') return 'Primary';
+  if (role === 'backup') return 'Backup';
+  return role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Controller';
+};
+
+const stateStyles = (state: string) => {
+  if (state === 'UP') return 'text-emerald-400 bg-emerald-400/10';
+  if (state === 'DOWN') return 'text-rose-400 bg-rose-400/10';
+  return 'text-amber-400 bg-amber-400/10';
+};
+
+const stateDot = (state: string) => {
+  if (state === 'UP') return 'bg-emerald-400 animate-pulse';
+  if (state === 'DOWN') return 'bg-rose-400';
+  return 'bg-amber-400';
+};
+
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, allowedMenus, controllers }) => {
   const items = allowedMenus ? NAVIGATION_ITEMS.filter(i => allowedMenus.includes(i.id)) : NAVIGATION_ITEMS;
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-slate-900 text-white flex flex-col z-20 transition-all duration-300">
@@ -44,20 +64,27 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, allowedMenus
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Cluster Info</p>
           </div>
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-400 font-medium">Primary (mgt03)</span>
-              <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
-                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                UP
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-slate-400 font-medium">Backup (mgt02)</span>
-              <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
-                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                UP
-              </span>
-            </div>
+            {!controllers || controllers.length === 0 ? (
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 font-medium">slurmctld</span>
+                <span className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 bg-slate-400/10 px-1.5 py-0.5 rounded">
+                  <span className="w-1 h-1 rounded-full bg-slate-400"></span>
+                  未知
+                </span>
+              </div>
+            ) : (
+              controllers.map((controller) => (
+                <div key={`${controller.role}-${controller.host}`} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium truncate" title={controller.host}>
+                    {roleLabel(controller.role)} ({controller.host})
+                  </span>
+                  <span className={`flex items-center gap-1.5 text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${stateStyles(controller.state)}`}>
+                    <span className={`w-1 h-1 rounded-full ${stateDot(controller.state)}`}></span>
+                    {controller.state}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
         

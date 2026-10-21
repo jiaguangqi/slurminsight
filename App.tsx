@@ -6,8 +6,9 @@ import Dashboard from './components/Dashboard.tsx';
 import HistoryView from './components/HistoryView.tsx';
 import NodeHeatmap from './components/NodeHeatmap.tsx';
 import JobQueueView from './components/JobQueueView.tsx';
+import ServiceHealth from './components/ServiceHealth.tsx';
 import { slurmService, DBStats, USE_MOCK } from './services/slurmService.ts';
-import { PartitionStats, HistoryRecord, RetentionPeriod, JobInfo, UserSession } from './types';
+import { PartitionStats, HistoryRecord, RetentionPeriod, JobInfo, UserSession, ControllerStatus } from './types';
 import { FETCH_INTERVAL_MS } from './constants.tsx';
 import { RefreshCw, Bell, Database, Save, Trash2, CheckCircle2, HardDrive, ShieldCheck, Activity, Download, Upload, AlertCircle } from 'lucide-react';
 import Login from './components/Login.tsx';
@@ -22,9 +23,14 @@ const AppContent: React.FC = () => {
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("Database updated successfully");
   const [dbStats, setDbStats] = useState<DBStats | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [controllers, setControllers] = useState<ControllerStatus[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [session, setSession] = useState<UserSession | null>(null);
-  const [ldapForm, setLdapForm] = useState({
+  const [ldapForm, setLdapForm] = useState<{
+    servers: Array<{ url: string; baseDn: string; bindDn: string; bindPassword: string; hasBindPassword?: boolean }>;
+    minUid: number;
+  }>({
     servers: [
       { url: '', baseDn: '', bindDn: '', bindPassword: '' },
       { url: '', baseDn: '', bindDn: '', bindPassword: '' }
@@ -62,24 +68,30 @@ const AppContent: React.FC = () => {
     setIsSyncing(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+      // Controller status is cheap; start it first so the sidebar fills in without waiting on the heavy queries.
+      slurmService.fetchClusterHealth().then(setControllers).catch(() => {});
       const stats = await slurmService.fetchCurrentStatus();
       const jobs = await slurmService.fetchJobs();
       slurmService.saveRecord(stats);
       
       setCurrentStats(stats);
       setCurrentJobs(jobs);
-      setHistory(slurmService.getHistory());
+      const historyRecords = await slurmService.fetchHistoryRecords();
+      setHistory(historyRecords);
       setLastSync(new Date());
       setDbStats(slurmService.getDBStats());
+      setDataError(null);
       
       triggerToast("Data synchronized successfully");
     } catch (error: any) {
       console.error("Failed to fetch Slurm data:", error);
       if (error?.status === 401) {
         handleLogout();
+        return;
       }
+      setCurrentStats([]);
+      setCurrentJobs([]);
+      setDataError(error?.message || 'Failed to load cluster data');
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
@@ -127,7 +139,13 @@ const AppContent: React.FC = () => {
           if (ldapRes.ok) {
             const data = await ldapRes.json();
             setLdapForm({
-              servers: data?.ldap?.servers || ldapForm.servers,
+              servers: (data?.ldap?.servers?.length ? data.ldap.servers : ldapForm.servers).map((server: any) => ({
+                url: server.url || '',
+                baseDn: server.baseDn || '',
+                bindDn: server.bindDn || '',
+                bindPassword: '',
+                hasBindPassword: Boolean(server.hasBindPassword),
+              })),
               minUid: data?.ldap?.minUid || 500
             });
           }
@@ -154,12 +172,28 @@ const AppContent: React.FC = () => {
     setTimeout(() => setShowSuccessToast(false), 3000);
   };
 
-  const handleRetentionChange = (period: RetentionPeriod) => {
+  const handleRetentionChange = async (period: RetentionPeriod) => {
     setRetention(period);
     slurmService.setRetentionPeriod(period);
-    setHistory(slurmService.getHistory());
+    if (session?.role === 'admin') {
+      const token = localStorage.getItem('authToken') || '';
+      try {
+        const res = await fetch('/api/admin/collector-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ retentionDays: period })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        triggerToast("Retention policy updated (server + browser)");
+      } catch (err) {
+        console.error('Failed to persist retention policy', err);
+        triggerToast("Saved locally — server retention unchanged");
+      }
+    } else {
+      triggerToast("Retention policy updated");
+    }
+    slurmService.fetchHistoryRecords().then(setHistory).catch(() => {});
     setDbStats(slurmService.getDBStats());
-    triggerToast("Retention policy updated");
   };
 
   const handleExport = async () => {
@@ -267,6 +301,8 @@ const AppContent: React.FC = () => {
         );
       case 'history':
         return <HistoryView history={history} />;
+      case 'services':
+        return <ServiceHealth />;
       case 'settings':
         return (
           <div className="space-y-12 animate-in fade-in duration-500 max-w-6xl">
@@ -309,7 +345,8 @@ const AppContent: React.FC = () => {
                                 servers[idx] = { ...servers[idx], bindDn: e.target.value };
                                 setLdapForm({ ...ldapForm, servers });
                               }} />
-                            <input className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm" placeholder="Bind 密码"
+                            <input className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                              placeholder={ldapForm.servers[idx]?.hasBindPassword ? '已加密保存，留空则不修改' : 'Bind 密码'}
                               type="password"
                               value={ldapForm.servers[idx]?.bindPassword || ''} onChange={e => {
                                 const servers = [...ldapForm.servers];
@@ -629,9 +666,9 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} allowedMenus={session?.menus || null} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} allowedMenus={session?.menus || null} controllers={controllers} />
       
-      <main className="flex-1 ml-64 p-8 transition-all duration-300">
+      <main className="flex-1 min-w-0 ml-64 p-8 transition-all duration-300">
         <header className="flex justify-end items-center gap-6 mb-10">
           <div className="flex items-center gap-3 text-xs text-slate-400 font-bold uppercase tracking-widest">
             <RefreshCw size={12} className={isSyncing ? 'animate-spin text-blue-500' : ''} />
@@ -652,6 +689,24 @@ const AppContent: React.FC = () => {
         </header>
 
         <div className="w-full mx-auto relative">
+          {dataError && (
+            <div className="mb-6 flex items-start gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl">
+              <AlertCircle size={18} className="text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-black text-rose-800">无法获取集群数据</p>
+                <p className="text-xs font-bold text-rose-600 mt-1">
+                  上一次同步失败（{dataError}）。界面当前不展示任何数据，也不会用模拟数据代替。
+                </p>
+              </div>
+              <button
+                onClick={fetchLatestData}
+                disabled={isSyncing}
+                className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-black hover:bg-rose-700 disabled:bg-rose-300"
+              >
+                重试
+              </button>
+            </div>
+          )}
           {renderContent()}
 
           {/* Global Success Toast */}

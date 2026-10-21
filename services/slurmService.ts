@@ -1,11 +1,126 @@
 
-import { ResourceType, PartitionStats, HistoryRecord, RetentionPeriod, NodeInfo, NodeState, JobInfo } from '../types';
+import { ResourceType, PartitionStats, HistoryRecord, RetentionPeriod, NodeInfo, NodeState, JobInfo, ControllerStatus } from '../types';
 import { STORAGE_KEY, MOCK_PARTITIONS } from '../constants.tsx';
 import JSZip from 'jszip';
 
 const CONFIG_KEY = 'slurm_monitor_config';
 const API_BASE = (import.meta.env?.VITE_API_BASE as string) || '/api';
 export const USE_MOCK = import.meta.env?.VITE_USE_MOCK === 'true';
+
+export interface JobUsagePoint {
+  ts: number;
+  cpuCores: number | null;
+  memoryBytes: number | null;
+}
+
+export interface JobUsageGpu {
+  hostname: string;
+  gpu: string;
+  utilization: number | null;
+  memoryBytes: number | null;
+}
+
+export interface JobUsage {
+  jobId: string;
+  rangeSeconds: number;
+  step: number;
+  cpu: { allocated: number | null; current: number | null; average: number | null; peak: number | null };
+  memory: {
+    requestedBytes: number | null;
+    current: number | null;
+    average: number | null;
+    peak: number | null;
+    rssPeakBytes: number | null;
+  };
+  gpus: JobUsageGpu[];
+  gpuDevices: Array<{ key: string; label: string }>;
+  gpuUtilSeries: Array<{ ts: number; [key: string]: number | null }>;
+  gpuMemorySeries: Array<{ ts: number; [key: string]: number | null }>;
+  series: JobUsagePoint[];
+  source: string;
+}
+
+export interface JobLogPayload {
+  stream: 'out' | 'err';
+  exists: boolean;
+  path?: string;
+  content: string;
+  size: number;
+  mtime: number | null;
+  truncated: boolean;
+}
+
+export interface ServiceHostState {
+  host: string;
+  reachable: boolean;
+  error?: string;
+  services: Record<string, string>;
+  files: Array<{ path: string; size: number; mtime: number }>;
+  dbdTail: string[];
+  dbError: boolean;
+}
+
+export interface ServiceSchedulerStats {
+  cycleLastUs?: number;
+  cycleMeanUs?: number;
+  cycleMaxUs?: number;
+  cyclePerMinute?: number;
+  queueLength?: number;
+  backfillDepth?: number;
+  backfillQueue?: number;
+  backfillActive?: boolean;
+  dbdQueue?: number;
+  serverThreads?: number;
+  clockLatencyUs?: number;
+  jobs?: {
+    submitted: number;
+    started: number;
+    completed: number;
+    canceled: number;
+    failed: number;
+    pending: number;
+    running: number;
+  };
+  since?: number | null;
+  error?: string;
+}
+
+export interface ServiceStatus {
+  controllers: ControllerStatus[];
+  primary: string | null;
+  backup: string | null;
+  hosts: ServiceHostState[];
+  scheduler: ServiceSchedulerStats;
+  dbd: {
+    config?: {
+      haHosts: Array<{ index: number; host: string; ip: string }>;
+      accountingHost: string | null;
+      accountingPort: number;
+      clusterName: string | null;
+      stateSaveLocation: string | null;
+      error?: string;
+    };
+    cluster?: { cluster: string; controlHost: string; controlPort: number; rpcUs: number; error?: string };
+    rollup?: { lastCycleUs: number | null; maxCycleUs: number | null; meanCycleUs: number | null; lastRanAt: string | null; error?: string };
+  };
+  timestamp: number;
+  cached?: boolean;
+}
+
+export interface ServiceLogSummary {
+  host: string;
+  source: 'ctld' | 'dbd';
+  hours: number;
+  total: number;
+  coveredFrom: string | null;
+  coveredTo: string | null;
+  byLevel: { fatal: number; error: number; warning: number; info: number };
+  topMessages: Array<{ pattern: string; count: number; sample: string }>;
+  confNodes: Array<{ node: string; count: number }>;
+  confNodeTotal: number;
+  recentErrors: Array<{ ts: string; level: string; message: string }>;
+  generatedAt: number;
+}
 
 export interface DBStats {
   engine: string;
@@ -310,22 +425,102 @@ class SlurmService {
 
   public async fetchCurrentStatus(): Promise<PartitionStats[]> {
     if (USE_MOCK) return this.scrapeCurrentStatusMock();
-    try {
-      return await this.fetchJSON<PartitionStats[]>('/partitions');
-    } catch (err) {
-      console.error('Failed to fetch partitions from API, falling back to mock data', err);
-      return this.scrapeCurrentStatusMock();
-    }
+    return this.fetchJSON<PartitionStats[]>('/partitions');
   }
 
   public async fetchJobs(): Promise<JobInfo[]> {
     if (USE_MOCK) return this.getJobsMock();
-    try {
-      return await this.fetchJSON<JobInfo[]>('/jobs');
-    } catch (err) {
-      console.error('Failed to fetch jobs from API, falling back to mock data', err);
-      return this.getJobsMock();
+    return this.fetchJSON<JobInfo[]>('/jobs');
+  }
+
+  public async fetchClusterHealth(): Promise<ControllerStatus[]> {
+    if (USE_MOCK) {
+      return [
+        { role: 'primary', host: 'mgt03', state: 'UP' },
+        { role: 'backup', host: 'mgt02', state: 'UP' },
+      ];
     }
+    const data = await this.fetchJSON<{ controllers: ControllerStatus[] }>('/cluster/health');
+    return Array.isArray(data?.controllers) ? data.controllers : [];
+  }
+
+  public async fetchServiceStatus(): Promise<ServiceStatus> {
+    return this.fetchJSON<ServiceStatus>('/services/status');
+  }
+
+  public async fetchServiceLogs(hours = 24, source: 'ctld' | 'dbd' = 'ctld', limit = 60): Promise<ServiceLogSummary> {
+    return this.fetchJSON<ServiceLogSummary>(`/services/logs?hours=${hours}&source=${source}&limit=${limit}`);
+  }
+
+  public async fetchJobScript(jobId: string): Promise<string> {
+    if (!jobId) return '';
+    if (USE_MOCK) {
+      return `Batch Script for ${jobId}\n------------------------------------------------------------\n#!/bin/bash\n#SBATCH -J mock_job\n#SBATCH -N 1\n#SBATCH -n 4\n\nsrun echo \"Hello from ${jobId}\"`;
+    }
+    try {
+      const data = await this.fetchJSON<{ script: string }>(`/jobs/${encodeURIComponent(jobId)}/script`);
+      return data?.script || '';
+    } catch (err) {
+      console.error(`Failed to fetch job script for ${jobId}`, err);
+      throw err;
+    }
+  }
+
+  public async fetchJobUsage(jobId: string, rangeSeconds = 3600): Promise<JobUsage> {
+    if (!jobId) throw new Error('Missing jobId');
+    if (USE_MOCK) {
+      return {
+        jobId,
+        rangeSeconds,
+        step: 60,
+        cpu: { allocated: null, current: null, average: null, peak: null },
+        memory: { requestedBytes: null, current: null, average: null, peak: null, rssPeakBytes: null },
+        gpus: [],
+        gpuDevices: [],
+        gpuUtilSeries: [],
+        gpuMemorySeries: [],
+        series: [],
+        source: 'mock',
+      };
+    }
+    return this.fetchJSON<JobUsage>(`/jobs/${encodeURIComponent(jobId)}/usage?range=${rangeSeconds}`);
+  }
+
+  public async fetchJobLog(jobId: string, stream: 'out' | 'err'): Promise<JobLogPayload> {
+    if (!jobId) throw new Error('Missing jobId');
+    if (USE_MOCK) {
+      return { stream, exists: false, path: '', content: '', size: 0, mtime: null, truncated: false };
+    }
+    return this.fetchJSON<JobLogPayload>(`/jobs/${encodeURIComponent(jobId)}/log?stream=${stream}`);
+  }
+
+  public async fetchHistoryRecords(start?: number, end?: number): Promise<HistoryRecord[]> {
+    if (USE_MOCK) return this.getHistory();
+    const params = new URLSearchParams();
+    if (start) params.set('start', String(start));
+    if (end) params.set('end', String(end));
+    const query = params.toString();
+    const rows = await this.fetchJSON<any[]>(`/history/partitions${query ? `?${query}` : ''}`);
+    const grouped = new Map<number, HistoryRecord>();
+
+    rows.forEach((row) => {
+      const ts = Number(row.ts ?? row.timestamp ?? 0);
+      if (!ts) return;
+      const rec = grouped.get(ts) || { timestamp: ts, partitions: [] };
+      rec.partitions.push({
+        id: `${row.name || 'partition'}-${ts}`,
+        name: row.name || '',
+        type: row.type,
+        allocated: Number(row.allocated ?? 0),
+        total: Number(row.total ?? 0),
+        pending: Number(row.pending ?? 0),
+        utilization: Number(row.utilization ?? 0),
+        timestamp: ts,
+      });
+      grouped.set(ts, rec);
+    });
+
+    return Array.from(grouped.values()).sort((a, b) => b.timestamp - a.timestamp);
   }
 
   public saveRecord(stats: PartitionStats[]): void {

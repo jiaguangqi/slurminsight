@@ -19,6 +19,9 @@ export interface NodeInfo {
   reason?: string;
   cpus?: string; // Format: A/I/O/T
   gres?: string; // Format: gpu:X
+  gpusAllocated?: number;
+  gpusTotal?: number;
+  gpuCards?: Array<{ index: number; jobId?: string; name?: string; user?: string }>;
 }
 
 export type JobState = 'RUNNING' | 'PENDING' | 'COMPLETING' | 'CONFIGURING' | 'SUSPENDED';
@@ -72,4 +75,10 @@ export interface UserSession {
   role: 'admin' | 'user';
   menus: string[] | null;
   partitions: string[] | null;
+}
+
+export interface ControllerStatus {
+  role: string;   // primary | backup
+  host: string;   // slurmctld host name
+  state: string;  // UP | DOWN | ...
 }

@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { HistoryRecord, FilterRange, ResourceType } from '../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts';
 import { Calendar, Search, Maximize2, X, Clock, Check } from 'lucide-react';
+import { slurmService } from '../services/slurmService.ts';
 
 interface HistoryViewProps {
   history: HistoryRecord[];
@@ -13,12 +14,38 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
   const [resourceFilter, setResourceFilter] = useState<'ALL' | 'CPU' | 'GPU'>('ALL');
   const [selectedPartition, setSelectedPartition] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(1); // Default to 1 day (24h)
+  const [records, setRecords] = useState<HistoryRecord[]>(history);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   const [dateRange, setDateRange] = useState<FilterRange>(() => {
     const end = new Date();
     const start = new Date(Date.now() - 24 * 60 * 60 * 1000);
     return { start, end };
   });
+
+  const startMs = dateRange.start.getTime();
+  const endMs = dateRange.end.getTime();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    slurmService.fetchHistoryRecords(startMs, endMs)
+      .then((rows) => {
+        if (!cancelled) setRecords(rows);
+      })
+      .catch((err: any) => {
+        if (!cancelled) {
+          setRecords([]);
+          setLoadError(err?.message || '加载历史数据失败');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [startMs, endMs]);
 
   const setPreset = (days: number) => {
     const end = new Date();
@@ -34,13 +61,13 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
   };
 
   const partitionNames = useMemo(() => {
-    if (history.length === 0) return [];
-    // Use the first record to get available partition names
-    return history[0].partitions
+    if (records.length === 0) return [];
+    // Use the most recent record to get available partition names
+    return records[0].partitions
       .filter(p => resourceFilter === 'ALL' || p.type === resourceFilter)
       .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .map(p => ({ name: p.name, type: p.type }));
-  }, [history, searchTerm, resourceFilter]);
+  }, [records, searchTerm, resourceFilter]);
 
   const getChartDataForPartition = (name: string) => {
     const startMs = dateRange.start.getTime();
@@ -48,7 +75,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
     const rangeDurationMs = endMs - startMs;
     const isLongRange = rangeDurationMs > 2 * 24 * 60 * 60 * 1000; // More than 2 days
 
-    return history
+    return records
       .filter(h => h.timestamp >= startMs && h.timestamp <= endMs)
       .sort((a, b) => a.timestamp - b.timestamp)
       .map(record => {
@@ -73,7 +100,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
 
   const selectedPartitionData = useMemo(() => {
     if (!selectedPartition) return null;
-    const type = history.find(h => h.partitions.some(p => p.name === selectedPartition))
+    const type = records.find(h => h.partitions.some(p => p.name === selectedPartition))
       ?.partitions.find(p => p.name === selectedPartition)?.type || ResourceType.CPU;
     
     return {
@@ -81,7 +108,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
       type,
       data: getChartDataForPartition(selectedPartition)
     };
-  }, [selectedPartition, history, dateRange]);
+  }, [selectedPartition, records, dateRange]);
 
   const formatDateForInput = (date: Date) => {
     const pad = (num: number) => num.toString().padStart(2, '0');
@@ -179,6 +206,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
       </div>
 
       {/* Grid of Trends */}
+      {loadError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-sm font-bold text-rose-700">
+          加载历史数据失败：{loadError}
+        </div>
+      )}
+      {loading && (
+        <div className="p-4 bg-slate-100 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500">
+          正在加载所选时间段的数据…
+        </div>
+      )}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4">
         {partitionNames.map((pInfo) => {
           const data = getChartDataForPartition(pInfo.name);
@@ -206,10 +243,10 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
               <div className="h-[200px] w-full mt-auto">
                 {data.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                    <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="time" hide={true} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9 }} width={35} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9 }} width={44} />
                       <Tooltip 
                         contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '10px' }}
                         labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}

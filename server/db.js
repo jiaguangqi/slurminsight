@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { encryptSecret, decryptSecret, isEncrypted } from './secret.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
@@ -10,23 +11,33 @@ const DB_CFG_FILE = path.join(DATA_DIR, 'db.json');
 const defaultDbConfig = {
   connectionString: process.env.PG_CONN || '',
   ssl: false,
-  intervalSeconds: 300
+  intervalSeconds: 300,
+  retentionDays: 365
 };
 
 export const ensureDataDir = () => {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
 };
+
+let dbConfigHadPlaintextSecret = false;
 
 export const loadDbConfig = () => {
   ensureDataDir();
   if (!fs.existsSync(DB_CFG_FILE)) {
-    fs.writeFileSync(DB_CFG_FILE, JSON.stringify(defaultDbConfig, null, 2));
+    fs.writeFileSync(DB_CFG_FILE, JSON.stringify(defaultDbConfig, null, 2), { mode: 0o600 });
     return { ...defaultDbConfig };
   }
   try {
     const raw = fs.readFileSync(DB_CFG_FILE, 'utf8');
     const parsed = JSON.parse(raw);
-    return { ...defaultDbConfig, ...parsed };
+    if (parsed.connectionString && !isEncrypted(parsed.connectionString)) {
+      dbConfigHadPlaintextSecret = true;
+    }
+    return {
+      ...defaultDbConfig,
+      ...parsed,
+      connectionString: decryptSecret(parsed.connectionString || defaultDbConfig.connectionString),
+    };
   } catch {
     return { ...defaultDbConfig };
   }
@@ -34,10 +45,15 @@ export const loadDbConfig = () => {
 
 export const saveDbConfig = (cfg) => {
   ensureDataDir();
-  fs.writeFileSync(DB_CFG_FILE, JSON.stringify(cfg, null, 2));
+  const onDisk = { ...cfg, connectionString: encryptSecret(cfg.connectionString) };
+  fs.writeFileSync(DB_CFG_FILE, JSON.stringify(onDisk, null, 2), { mode: 0o600 });
 };
 
 export let dbConfig = loadDbConfig();
+if (dbConfigHadPlaintextSecret && dbConfig.connectionString) {
+  saveDbConfig(dbConfig);
+  console.log('Encrypted the stored PostgreSQL connection string at rest');
+}
 export let pool = dbConfig.connectionString ? new Pool({ connectionString: dbConfig.connectionString, ssl: dbConfig.ssl }) : null;
 
 export const resetPoolWithConfig = async (cfg) => {
@@ -74,6 +90,7 @@ export const initTables = async () => {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_partition_ts ON partition_history(ts);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_partition_name_ts ON partition_history(name, ts);`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS job_history (
@@ -90,4 +107,14 @@ export const initTables = async () => {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_job_ts ON job_history(ts);`);
+};
+
+// Keeps the history tables bounded: drops rows older than the retention window.
+export const purgeOldHistory = async (retentionDays) => {
+  if (!pool) return null;
+  const days = Number(retentionDays) || 365;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const partitionRes = await pool.query('DELETE FROM partition_history WHERE ts < $1', [cutoff]);
+  const jobRes = await pool.query('DELETE FROM job_history WHERE ts < $1', [cutoff]);
+  return { cutoff, partitionRows: partitionRes.rowCount, jobRows: jobRes.rowCount };
 };

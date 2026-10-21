@@ -2,7 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import { PartitionStats, ResourceType, JobInfo } from '../types';
 import StatCard from './StatCard.tsx';
-import { AlertCircle, Cpu, Zap, RefreshCw, Clock } from 'lucide-react';
+import PartitionNodesModal from './PartitionNodesModal.tsx';
+import { AlertCircle, Cpu, Zap, RefreshCw, Clock, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
 interface DashboardProps {
   stats: PartitionStats[];
@@ -28,11 +29,35 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
   const gpuUtil = totalGpus > 0 ? (usedGpus / totalGpus) * 100 : 0;
 
   const [pendingPartition, setPendingPartition] = useState<string | null>(null);
+  const [nodesPartition, setNodesPartition] = useState<PartitionStats | null>(null);
+  const [prioritySort, setPrioritySort] = useState<'queue' | 'desc' | 'asc'>('queue');
 
   const pendingJobsForPartition = useMemo(() => {
     if (!pendingPartition) return [];
-    return jobs.filter(j => j.partition === pendingPartition && j.state === 'PENDING');
-  }, [jobs, pendingPartition]);
+    const list = jobs.filter(j => j.partition === pendingPartition && j.state === 'PENDING');
+    if (prioritySort === 'queue') return list;
+    const dir = prioritySort === 'desc' ? -1 : 1;
+    return [...list].sort((a, b) => {
+      const diff = (Number(a.priority) || 0) - (Number(b.priority) || 0);
+      if (diff !== 0) return diff * dir;
+      return (Number(a.jobId) || 0) - (Number(b.jobId) || 0);
+    });
+  }, [jobs, pendingPartition, prioritySort]);
+
+  const openPending = (partition: string) => {
+    setPrioritySort('queue');
+    setPendingPartition(partition);
+  };
+
+  const priorityText = (raw?: string) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return raw || '-';
+    return Number.isInteger(value) ? value.toLocaleString('en-US') : value.toFixed(2);
+  };
+
+  const cyclePrioritySort = () => {
+    setPrioritySort(prev => (prev === 'queue' ? 'desc' : prev === 'desc' ? 'asc' : 'queue'));
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -128,7 +153,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
             {cpuPartitions.map(p => (
-              <StatCard key={p.name} stats={p} onPendingClick={setPendingPartition} />
+              <StatCard key={p.name} stats={p} onPendingClick={openPending} onNodesClick={setNodesPartition} />
             ))}
           </div>
         </section>
@@ -142,7 +167,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
             {gpuPartitions.map(p => (
-              <StatCard key={p.name} stats={p} onPendingClick={setPendingPartition} />
+              <StatCard key={p.name} stats={p} onPendingClick={openPending} onNodesClick={setNodesPartition} />
             ))}
           </div>
         </section>
@@ -174,6 +199,18 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
                       <th className="text-left px-4 py-3">JobID</th>
                       <th className="text-left px-4 py-3">Name</th>
                       <th className="text-left px-4 py-3">User</th>
+                      <th className="text-right px-4 py-3">
+                        <button
+                          onClick={cyclePrioritySort}
+                          title="按优先级排序：高 → 低 → 恢复队列顺序"
+                          className={`inline-flex items-center gap-1 uppercase tracking-widest font-black transition-colors ${
+                            prioritySort === 'queue' ? 'text-slate-500 hover:text-slate-800' : 'text-blue-600'
+                          }`}
+                        >
+                          Priority
+                          {prioritySort === 'desc' ? <ArrowDown size={11} /> : prioritySort === 'asc' ? <ArrowUp size={11} /> : <ArrowUpDown size={11} className="opacity-50" />}
+                        </button>
+                      </th>
                       <th className="text-left px-4 py-3">CPUs</th>
                       <th className="text-left px-4 py-3">GPUs</th>
                       <th className="text-left px-4 py-3">Reason</th>
@@ -185,6 +222,9 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
                         <td className="px-4 py-2 font-mono font-bold text-slate-900">{job.jobId}</td>
                         <td className="px-4 py-2 font-bold">{job.name}</td>
                         <td className="px-4 py-2">{job.user}</td>
+                        <td className="px-4 py-2 text-right font-mono font-bold tabular-nums text-slate-700">
+                          {priorityText(job.priority)}
+                        </td>
                         <td className="px-4 py-2">{job.cpus ?? '-'}</td>
                         <td className="px-4 py-2">{job.gpus ?? 0}</td>
                         <td className="px-4 py-2 text-slate-500">{job.reason || '等待资源'}</td>
@@ -196,6 +236,9 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
             </div>
           </div>
         </div>
+      )}
+      {nodesPartition && (
+        <PartitionNodesModal partition={nodesPartition} onClose={() => setNodesPartition(null)} />
       )}
     </div>
   );

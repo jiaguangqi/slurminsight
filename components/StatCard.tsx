@@ -1,14 +1,15 @@
 
 import React from 'react';
 import { PartitionStats, ResourceType } from '../types';
-import { Users, Cpu, Zap } from 'lucide-react';
+import { Users, Cpu, Zap, Server } from 'lucide-react';
 
 interface StatCardProps {
   stats: PartitionStats;
   onPendingClick?: (partition: string) => void;
+  onNodesClick?: (stats: PartitionStats) => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick }) => {
+const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick, onNodesClick }) => {
   const isHigh = stats.utilization > 90;
   const isZero = stats.utilization === 0;
   
@@ -33,8 +34,17 @@ const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick }) => {
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{stats.type}</p>
           <h3 className="text-sm font-black text-slate-800 truncate" title={stats.name}>{stats.name}</h3>
         </div>
-        <div className={`p-1.5 rounded-lg ${stats.type === ResourceType.CPU ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-          {stats.type === ResourceType.CPU ? <Cpu size={14} /> : <Zap size={14} />}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onNodesClick?.(stats)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+            title={`查看 ${stats.name} 的节点`}
+          >
+            <Server size={14} />
+          </button>
+          <div className={`p-1.5 rounded-lg ${stats.type === ResourceType.CPU ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+            {stats.type === ResourceType.CPU ? <Cpu size={14} /> : <Zap size={14} />}
+          </div>
         </div>
       </div>
 
@@ -69,7 +79,7 @@ const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick }) => {
               className="flex items-center gap-1 text-amber-600 font-bold text-[10px] hover:text-amber-700 underline-offset-2 hover:underline"
             >
               <Users size={10} />
-              <span>{stats.pending} WAIT</span>
+              <span>{stats.pending} {stats.type === ResourceType.GPU ? 'GPU 等待' : '作业等待'}</span>
             </button>
           )}
         </div>

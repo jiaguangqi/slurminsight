@@ -35,7 +35,7 @@ const Login: React.FC<LoginProps> = ({ onSuccess }) => {
       <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl p-8 space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-black text-slate-900">SlurmInsight 登录</h1>
-          <p className="text-slate-500 text-sm">请输入账户与密码，管理员默认 admin / P@ssw0rd01!</p>
+          <p className="text-slate-500 text-sm">请输入账户与密码</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
