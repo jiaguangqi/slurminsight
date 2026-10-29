@@ -1,7 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PartitionStats, NodeState, NodeInfo, ResourceType, JobInfo } from '../types';
 import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User } from 'lucide-react';
+import NodeDetailModal from './NodeDetailModal.tsx';
+import { slurmService } from '../services/slurmService.ts';
+import type { NodeMonitoringEntry } from '../services/slurmService.ts';
 
 interface NodeHeatmapProps {
   partitions: PartitionStats[];
@@ -31,6 +34,33 @@ const CONTAINER_STYLES: Record<NodeState, string> = {
 const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
   const [groupBy, setGroupBy] = useState<GroupByMode>('all');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<Record<string, NodeMonitoringEntry>>({});
+  const [coverageError, setCoverageError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const payload = await slurmService.fetchNodeMonitoring();
+        if (!cancelled) {
+          setCoverage(payload?.nodes || {});
+          setCoverageError(false);
+        }
+      } catch {
+        if (!cancelled) setCoverageError(true);
+      }
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
+  const collectorIssues = useMemo(() => {
+    const states = (entry: NodeMonitoringEntry) => [entry.metrics, entry.jobs, entry.gpu].filter((state) => state !== 'ok' && state !== 'n/a');
+    const entries = Object.values(coverage) as NodeMonitoringEntry[];
+    return entries.filter((entry) => states(entry).length > 0).length;
+  }, [coverage]);
 
   const groups = useMemo(() => {
     const allNodesMap = new Map<string, NodeInfo & { partitionNames: string[]; type: ResourceType }>();
@@ -148,6 +178,17 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
               </span>
             </div>
           ))}
+          <div className="flex items-center gap-1.5 pl-4 border-l border-slate-200">
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">采集异常</span>
+            {collectorIssues > 0 && <span className="text-[10px] font-black text-rose-500 tabular-nums">{collectorIssues}</span>}
+          </div>
+          {coverageError && (
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle size={11} className="text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tight">采集状态暂不可用</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -193,13 +234,30 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                     const expanded = j.nodesExpanded && j.nodesExpanded.length > 0 ? j.nodesExpanded : (j.nodelist ? [j.nodelist] : []);
                     return expanded.some(n => n === node.name);
                   });
-                  
+
+                  const entry = coverage[node.name];
+                  const missingMetrics = !!entry && entry.metrics !== 'ok';
+                  const otherIssues = !!entry && (entry.jobs !== 'ok' && entry.jobs !== 'n/a' || entry.gpu !== 'ok' && entry.gpu !== 'n/a');
+                  const hasIssue = missingMetrics || otherIssues;
+                  const issueTitle = entry
+                    ? [
+                        entry.metrics !== 'ok' ? 'node_exporter 数据缺失' : null,
+                        entry.jobs !== 'ok' && entry.jobs !== 'n/a' ? '作业资源数据缺失' : null,
+                        entry.gpu !== 'ok' && entry.gpu !== 'n/a' ? 'GPU 指标缺失' : null,
+                      ].filter(Boolean).join('；')
+                    : '';
+
                   return (
                     <div
                       key={`${group.id}-${node.name}-${idx}`}
                       className="group relative flex flex-col items-center"
                     >
-                      <div className={`p-2 rounded-lg border transition-all duration-200 hover:scale-125 hover:shadow-xl cursor-pointer relative z-10 ${CONTAINER_STYLES[node.state]}`}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNode(node.name)}
+                        title={hasIssue ? `点击查看详情 · ${issueTitle}` : '点击查看节点详情'}
+                        className={`p-2 rounded-lg border transition-all duration-200 hover:scale-125 hover:shadow-xl cursor-pointer relative z-10 ${CONTAINER_STYLES[node.state]}`}
+                      >
                         <Monitor 
                           size={18} 
                           className={`${STATE_COLORS[node.state]} transition-transform ${node.state === 'down' ? 'animate-pulse' : ''}`} 
@@ -277,11 +335,20 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                             )}
                           </div>
                         </div>
-                      </div>
+                      </button>
                       
                       <span className={`mt-1 text-[9px] font-bold truncate w-full text-center group-hover:text-slate-900 group-hover:font-black transition-all ${node.state === 'down' ? 'text-rose-600' : 'text-slate-400'}`}>
                         {node.name}
                       </span>
+                      {hasIssue && (
+                        <span
+                          className="mt-1 flex items-center justify-center"
+                          title={issueTitle}
+                        >
+                          <i className={`block w-1.5 h-1.5 rounded-full ${missingMetrics ? 'bg-rose-500' : 'bg-amber-500'}`} />
+                        </span>
+                      )}
+                      {!hasIssue && <span className="mt-1 block h-1.5" aria-hidden="true" />}
                     </div>
                   );
                 })}
@@ -290,6 +357,26 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
           );
         })}
       </div>
+
+      {selectedNode && (
+        <NodeDetailModal
+          nodeName={selectedNode}
+          fallback={(() => {
+            const found = groups.flatMap((group) => group.nodes).find((node) => node.name === selectedNode);
+            if (!found) return undefined;
+            return {
+              state: found.state,
+              cpus: found.cpus,
+              gres: found.gres,
+              gpusTotal: found.gpusTotal,
+              gpusAllocated: found.gpusAllocated,
+              memoryTotalMb: found.memoryTotalMb,
+              reason: found.reason,
+            };
+          })()}
+          onClose={() => setSelectedNode(null)}
+        />
+      )}
     </div>
   );
 };

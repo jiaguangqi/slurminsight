@@ -60,6 +60,89 @@ export interface ServiceHostState {
   dbError: boolean;
 }
 
+export type CollectorState = 'ok' | 'down' | 'missing' | 'n/a';
+
+export interface NodeMonitoringEntry {
+  ip: string | null;
+  metrics: CollectorState;
+  jobs: CollectorState;
+  gpu: CollectorState;
+}
+
+export interface NodeMonitoringPayload {
+  generatedAt: string;
+  source: string;
+  nodes: Record<string, NodeMonitoringEntry>;
+}
+
+export interface NodeMetricSeries {
+  points: Array<{ ts: number; value: number }>;
+  current: number | null;
+  average: number | null;
+  peak: number | null;
+}
+
+export interface NodeGpuCard {
+  index: string;
+  modelName?: string;
+  utilization?: number;
+  memoryUsedBytes?: number;
+  memoryFreeBytes?: number;
+  memoryTotalBytes?: number;
+  temperature?: number;
+  powerWatts?: number;
+}
+
+export interface NodeRunningJob {
+  jobId: string;
+  name: string;
+  user: string;
+  partition: string;
+  state: string;
+  runtime?: string;
+  reqTres?: string;
+  cpus?: number;
+  gpus: number;
+  gpuCards: string[];
+  cpuCores: number | null;
+  memoryBytes: number | null;
+  gpuMemoryBytes: number | null;
+  gpuUtilization: number | null;
+}
+
+export interface NodeDetail {
+  node: {
+    name: string;
+    state: NodeState;
+    partitions: string[];
+    cpus?: string;
+    gres?: string;
+    gpusTotal: number;
+    gpusAllocated: number;
+    memoryTotalMb: number | null;
+    memoryAllocatedMb: number | null;
+    reason?: string | null;
+    load: number;
+  };
+  monitoring: NodeMonitoringEntry | null;
+  rangeSeconds: number;
+  step: number;
+  series: {
+    cpuUtil: NodeMetricSeries;
+    cpuCores: NodeMetricSeries;
+    memoryPct: NodeMetricSeries;
+    memoryUsed: NodeMetricSeries;
+    load1: NodeMetricSeries;
+    netRx: NodeMetricSeries;
+    netTx: NodeMetricSeries;
+  };
+  gpus: NodeGpuCard[];
+  gpuUtilSeries: Array<{ ts: number; [key: string]: number }>;
+  gpuMemSeries: Array<{ ts: number; [key: string]: number }>;
+  jobs: NodeRunningJob[];
+  source: string;
+}
+
 export interface ServiceSchedulerStats {
   cycleLastUs?: number;
   cycleMeanUs?: number;
@@ -446,6 +529,15 @@ class SlurmService {
 
   public async fetchServiceStatus(): Promise<ServiceStatus> {
     return this.fetchJSON<ServiceStatus>('/services/status');
+  }
+
+  public async fetchNodeMonitoring(): Promise<NodeMonitoringPayload> {
+    return this.fetchJSON<NodeMonitoringPayload>('/nodes/monitoring');
+  }
+
+  public async fetchNodeDetail(node: string, rangeSeconds = 3600): Promise<NodeDetail> {
+    if (!node) throw new Error('Missing node name');
+    return this.fetchJSON<NodeDetail>(`/nodes/${encodeURIComponent(node)}/detail?range=${rangeSeconds}`);
   }
 
   public async fetchServiceLogs(hours = 24, source: 'ctld' | 'dbd' = 'ctld', limit = 60): Promise<ServiceLogSummary> {

@@ -533,18 +533,29 @@ const fetchNodes = async () => {
   try {
     const { stdout: detail } = await execAsync('/usr/bin/scontrol show node -o', { maxBuffer: 16 * 1024 * 1024, timeout: 12000 });
     const gpuUsage = new Map();
+    const memoryUsage = new Map();
     detail.split('\n').forEach((line) => {
       const name = line.match(/NodeName=(\S+)/)?.[1];
       if (!name) return;
       const total = line.match(/CfgTRES=[^\s]*gres\/gpu=(\d+)/)?.[1];
       const alloc = line.match(/AllocTRES=[^\s]*gres\/gpu=(\d+)/)?.[1];
       if (total || alloc) gpuUsage.set(name, { total: jsonNumber(total), allocated: jsonNumber(alloc) });
+      const realMemory = line.match(/(?:^|\s)RealMemory=(\d+)/)?.[1];
+      const allocMemory = line.match(/(?:^|\s)AllocMem=(\d+)/)?.[1];
+      if (realMemory || allocMemory) {
+        memoryUsage.set(name, { total: jsonNumber(realMemory), allocated: jsonNumber(allocMemory) });
+      }
     });
     nodes.forEach((node) => {
       const usage = gpuUsage.get(node.name);
       if (usage) {
         node.gpusTotal = usage.total;
         node.gpusAllocated = usage.allocated;
+      }
+      const memory = memoryUsage.get(node.name);
+      if (memory) {
+        node.memoryTotalMb = memory.total;
+        node.memoryAllocatedMb = memory.allocated;
       }
     });
   } catch (err) {
@@ -1639,8 +1650,7 @@ const parseRequestedMemoryBytes = (reqTres = '') => {
   return Math.round(amount * factor);
 };
 
-const fetchJobGpuTargets = async (jobId) => {
-  const mappings = await vmFetch('/api/v1/query', { query: `node_cr_gpu_jobinfo{job_id="${jobId}"}` });
+const fetchJobGpuTargets = async (jobId) => {  const mappings = await vmFetch('/api/v1/query', { query: `node_cr_gpu_jobinfo{job_id="${jobId}"}` });
   const seen = new Set();
   const targets = [];
   mappings.forEach((item) => {
@@ -1745,7 +1755,10 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
 
     const gpuTargets = await fetchJobGpuTargets(jobId).catch(() => []);
     const [cpuPoints, memoryPoints, rssPoints, allocatedCpus, gpus, gpuSeries] = await Promise.all([
-      vmRange(`sum(rate(cgroup_cpu_usage_percpu{${selector}}[2m]))/1e9`, start, end, step),
+      vmRange(`sum(rate(cgroup_cpu_usage_percpu{${selector}}[2m]))/1e9`, start, end, step)
+        // 部分节点的 cgroup exporter 不提供 per-cpu 指标，回退到累计秒数（单位即核数）
+        .then((points) => (points.length ? points : vmRange(`sum(rate(cgroup_cpu_total_seconds{${selector}}[2m]))`, start, end, step)))
+        .catch(() => []),
       vmRange(`sum(cgroup_memory_used_bytes{${selector}})`, start, end, step),
       vmRange(`sum(cgroup_memory_rss_bytes{${selector}})`, start, end, step).catch(() => []),
       vmInstant(`max(cgroup_cpus{${selector}})`).catch(() => null),
@@ -1790,6 +1803,286 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
     const status = err.message === 'Invalid jobId' ? 400 : 502;
     console.error('Failed to read job usage', err.message);
     res.status(status).json({ error: 'Failed to read job usage', details: err.message });
+  }
+});
+
+// -------- Node detail & collector coverage (VictoriaMetrics / Prometheus) --------
+const NODE_EXPORTER_PORT = 9100;
+const CGROUP_EXPORTER_PORT = 1999;
+const NODE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+
+let nodeIpCache = { at: 0, ips: new Map() };
+
+// node_uname_info is the only series that ties a Slurm node name to a scrape target.
+const loadNodeIps = async () => {
+  if (nodeIpCache.ips.size && Date.now() - nodeIpCache.at < 5 * 60 * 1000) return nodeIpCache.ips;
+  const rows = await vmFetch('/api/v1/query', { query: 'node_uname_info' });
+  const ips = new Map();
+  rows.forEach((row) => {
+    const name = row.metric?.nodename;
+    const ip = String(row.metric?.instance || '').split(':')[0];
+    if (!name || !ip) return;
+    if (!ips.has(name)) ips.set(name, []);
+    if (!ips.get(name).includes(ip)) ips.get(name).push(ip);
+  });
+  nodeIpCache = { at: Date.now(), ips };
+  return ips;
+};
+
+const upMap = (rows, label) => {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = row.metric?.[label];
+    if (key) map.set(key, Number(row.value?.[1]) === 1);
+  });
+  return map;
+};
+
+const collectorState = (target, up) => {
+  if (!target) return 'missing';
+  return up ? 'ok' : 'down';
+};
+
+const selectorFor = (ips, port) => ips.map((ip) => `${ip}:${port}`).join('|');
+
+let monitoringCache = { at: 0, payload: null };
+const MONITORING_TTL_MS = 60 * 1000;
+
+const buildNodeMonitoring = async () => {
+  const [nodes, ips, nodeUpRows, cgroupUpRows, gpuUpRows] = await Promise.all([
+    fetchNodes(),
+    loadNodeIps(),
+    vmFetch('/api/v1/query', { query: 'up{job="node-export"}' }),
+    vmFetch('/api/v1/query', { query: 'up{job="cgroup_exporter"}' }),
+    vmFetch('/api/v1/query', { query: 'up{job="gpu_exporter"}' }),
+  ]);
+  const nodeUp = upMap(nodeUpRows, 'instance');
+  const cgroupUp = upMap(cgroupUpRows, 'instance');
+  const gpuUp = upMap(gpuUpRows, 'hostname');
+
+  const entries = {};
+  nodes.forEach((node) => {
+    const nodeIps = ips.get(node.name) || [];
+    const metricTarget = nodeIps.map((ip) => `${ip}:${NODE_EXPORTER_PORT}`).find((key) => nodeUp.has(key)) || null;
+    const jobTarget = nodeIps.map((ip) => `${ip}:${CGROUP_EXPORTER_PORT}`).find((key) => cgroupUp.has(key)) || null;
+    const isGpu = (node.gpusTotal || 0) > 0 || /gpu[:=]/i.test(node.gres || '');
+    entries[node.name] = {
+      ip: nodeIps[0] || null,
+      metrics: collectorState(metricTarget, metricTarget ? nodeUp.get(metricTarget) : false),
+      jobs: collectorState(jobTarget, jobTarget ? cgroupUp.get(jobTarget) : false),
+      gpu: isGpu ? collectorState(gpuUp.has(node.name) ? node.name : null, gpuUp.get(node.name)) : 'n/a',
+    };
+  });
+
+  return { generatedAt: new Date().toISOString(), source: VM_URL, nodes: entries };
+};
+
+app.get('/api/nodes/monitoring', requireAuth, async (_req, res) => {
+  try {
+    if (!monitoringCache.payload || Date.now() - monitoringCache.at > MONITORING_TTL_MS) {
+      monitoringCache = { at: Date.now(), payload: await buildNodeMonitoring() };
+    }
+    res.json(monitoringCache.payload);
+  } catch (err) {
+    console.error('Failed to build node monitoring coverage', err.message);
+    res.status(502).json({ error: 'Failed to read monitoring coverage', details: err.message });
+  }
+});
+
+app.get('/api/nodes/:node/detail', requireAuth, async (req, res) => {
+  const nodeName = String(req.params.node || '').trim();
+  if (!NODE_NAME_RE.test(nodeName)) return res.status(400).json({ error: 'Invalid node name' });
+  try {
+    const [nodes, ips, jobs, monitoring] = await Promise.all([
+      fetchNodes(),
+      loadNodeIps(),
+      fetchJobs(),
+      buildNodeMonitoring().catch(() => null),
+    ]);
+    const node = nodes.find((item) => item.name === nodeName);
+    if (!node) return res.status(404).json({ error: 'Node not found' });
+
+    const rangeSeconds = Math.min(Math.max(parseInt(req.query.range, 10) || 3600, 300), 7 * 24 * 3600);
+    const step = Math.max(60, Math.ceil(rangeSeconds / 120));
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - rangeSeconds;
+
+    const nodeIps = ips.get(nodeName) || [];
+    const metricSel = selectorFor(nodeIps, NODE_EXPORTER_PORT);
+    const cgroupSel = selectorFor(nodeIps, CGROUP_EXPORTER_PORT);
+    const isGpu = (node.gpusTotal || 0) > 0 || /gpu[:=]/i.test(node.gres || '');
+
+    const emptySeries = { points: [], current: null, average: null, peak: null };
+    const seriesOrEmpty = (promise) => promise.catch(() => []);
+
+    const seriesQueries = metricSel
+      ? {
+          cpuUtil: `100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle",instance=~"${metricSel}"}[2m])))`,
+          cpuCores: `sum(rate(node_cpu_seconds_total{mode!="idle",instance=~"${metricSel}"}[2m]))`,
+          memoryPct: `100 * (1 - node_memory_MemAvailable_bytes{instance=~"${metricSel}"} / node_memory_MemTotal_bytes{instance=~"${metricSel}"})`,
+          memoryUsed: `node_memory_MemTotal_bytes{instance=~"${metricSel}"} - node_memory_MemAvailable_bytes{instance=~"${metricSel}"}`,
+          load1: `node_load1{instance=~"${metricSel}"}`,
+          netRx: `sum(rate(node_network_receive_bytes_total{instance=~"${metricSel}",device!~"lo|veth.*|docker.*|br-.*|virbr.*|cali.*|flannel.*"}[2m]))`,
+          netTx: `sum(rate(node_network_transmit_bytes_total{instance=~"${metricSel}",device!~"lo|veth.*|docker.*|br-.*|virbr.*|cali.*|flannel.*"}[2m]))`,
+        }
+      : null;
+
+    const gpuQuery = (metric, extra = '') => `DCGM_FI_DEV_${metric}{hostname="${nodeName}"${extra}}`;
+    const nodeJobs = jobs.filter((job) => {
+      if (job.state !== 'RUNNING') return false;
+      const expanded = job.nodesExpanded && job.nodesExpanded.length > 0 ? job.nodesExpanded : (job.nodelist ? [job.nodelist] : []);
+      return expanded.some((name) => name === nodeName);
+    });
+
+    const [seriesPairs, cpuUsageRows, memoryRows, gpuUtilRows, gpuMemRows, gpuInfoRows, jobGpuMemRows, gpuInstant] = await Promise.all([
+      seriesQueries
+        ? Promise.all(Object.entries(seriesQueries).map(([key, query]) => vmRange(query, start, end, step).then((points) => [key, points]).catch(() => [key, []])))
+        : Promise.resolve([]),
+      cgroupSel ? seriesOrEmpty(
+        vmFetch('/api/v1/query', { query: `sum by (jobId) (rate(cgroup_cpu_usage_percpu{instance=~"${cgroupSel}"}[2m]))/1e9` })
+          // 部分节点的 cgroup exporter 只暴露 cgroup_cpu_total_seconds（单位：秒，速率即核数）
+          .then((rows) => (rows.length ? rows : vmFetch('/api/v1/query', { query: `sum by (jobId) (rate(cgroup_cpu_total_seconds{instance=~"${cgroupSel}"}[2m]))` })))
+      ) : [],
+      cgroupSel ? seriesOrEmpty(vmFetch('/api/v1/query', { query: `sum by (jobId) (cgroup_memory_used_bytes{instance=~"${cgroupSel}"})` })) : [],
+      isGpu ? seriesOrEmpty(vmRangeSeries(gpuQuery('GPU_UTIL'), start, end, step)) : [],
+      isGpu ? seriesOrEmpty(vmRangeSeries(gpuQuery('FB_USED'), start, end, step)) : [],
+      isGpu ? seriesOrEmpty(vmFetch('/api/v1/query', { query: `node_cr_gpu_jobinfo{hostname="${nodeName}"}` })) : [],
+      isGpu ? seriesOrEmpty(vmFetch('/api/v1/query', { query: 'sum by (job_id) (node_cr_job_gpu_memory)' })) : [],
+      isGpu
+        ? Promise.all([
+            seriesOrEmpty(vmFetch('/api/v1/query', { query: gpuQuery('GPU_UTIL') })),
+            seriesOrEmpty(vmFetch('/api/v1/query', { query: gpuQuery('FB_USED') })),
+            seriesOrEmpty(vmFetch('/api/v1/query', { query: gpuQuery('FB_FREE') })),
+            seriesOrEmpty(vmFetch('/api/v1/query', { query: gpuQuery('GPU_TEMP') })),
+            seriesOrEmpty(vmFetch('/api/v1/query', { query: gpuQuery('POWER_USAGE') })),
+          ])
+        : [[], [], [], [], []],
+    ]);
+
+    const series = {};
+    const SERIES_KEYS = ['cpuUtil', 'cpuCores', 'memoryPct', 'memoryUsed', 'load1', 'netRx', 'netTx'];
+    SERIES_KEYS.forEach((key) => { series[key] = emptySeries; });
+    seriesPairs.forEach(([key, points]) => { series[key] = { points, ...summarizeSeries(points) }; });
+
+    // GPU: one entry per physical card, with current utilisation and memory.
+    const gpuByIndex = new Map();
+    const applyGpu = (rows, field, transform = (v) => v, meta) => {
+      rows.forEach((row) => {
+        const index = String(row.metric?.gpu ?? '');
+        if (index === '') return;
+        if (!gpuByIndex.has(index)) gpuByIndex.set(index, { index });
+        const entry = gpuByIndex.get(index);
+        const value = Number(row.value?.[1]);
+        if (Number.isFinite(value)) entry[field] = transform(value);
+        if (meta && row.metric?.[meta]) entry[meta] = row.metric[meta];
+      });
+    };
+    const FB_MIB = 1024 * 1024;
+    applyGpu(gpuInstant[0], 'utilization');
+    applyGpu(gpuInstant[1], 'memoryUsedBytes', (v) => v * FB_MIB);
+    applyGpu(gpuInstant[2], 'memoryFreeBytes', (v) => v * FB_MIB);
+    applyGpu(gpuInstant[3], 'temperature');
+    applyGpu(gpuInstant[4], 'powerWatts');
+    applyGpu(gpuInstant[0], 'modelName', (v) => v, 'modelName');
+    const gpus = Array.from(gpuByIndex.values())
+      .map((card) => ({
+        ...card,
+        memoryTotalBytes: card.memoryUsedBytes !== undefined && card.memoryFreeBytes !== undefined
+          ? card.memoryUsedBytes + card.memoryFreeBytes
+          : undefined,
+      }))
+      .sort((a, b) => Number(a.index) - Number(b.index));
+
+    // GPU history, keyed gpu0..gpuN so recharts can plot one line per card.
+    const mergeGpuSeries = (rows, transform = (v) => v) => {
+      const byTs = new Map();
+      rows.forEach((s) => {
+        const index = String(s.metric?.gpu ?? '');
+        if (index === '') return;
+        s.points.forEach((point) => {
+          if (!byTs.has(point.ts)) byTs.set(point.ts, { ts: point.ts });
+          byTs.get(point.ts)[`gpu${index}`] = transform(point.value);
+        });
+      });
+      return Array.from(byTs.values()).sort((a, b) => a.ts - b.ts);
+    };
+    const gpuUtilSeries = isGpu ? mergeGpuSeries(gpuUtilRows) : [];
+    const gpuMemSeries = isGpu ? mergeGpuSeries(gpuMemRows, (v) => v * FB_MIB) : [];
+
+    // Per-job usage, joined onto the Slurm job list for this node.
+    const cpuByJob = new Map(cpuUsageRows.map((row) => [String(row.metric?.jobId), Number(row.value?.[1])]));
+    const memByJob = new Map(memoryRows.map((row) => [String(row.metric?.jobId), Number(row.value?.[1])]));
+    const gpuMemByJob = new Map(jobGpuMemRows.map((row) => [String(row.metric?.job_id), Number(row.value?.[1])]));
+    const gpuCardsByJob = new Map();
+    // Slurm's own allocation (gres_detail) is authoritative; the exporter's map is partial.
+    const slurmCards = buildGpuCards(jobs).get(nodeName);
+    if (slurmCards) {
+      slurmCards.forEach((card) => {
+        if (!card.jobId) return;
+        if (!gpuCardsByJob.has(card.jobId)) gpuCardsByJob.set(card.jobId, new Set());
+        gpuCardsByJob.get(card.jobId).add(String(card.index));
+      });
+    }
+    gpuInfoRows.forEach((row) => {
+      const jobId = String(row.metric?.job_id ?? '');
+      const gpu = String(row.metric?.gpu ?? '');
+      if (!jobId || gpu === '') return;
+      if (!gpuCardsByJob.has(jobId)) gpuCardsByJob.set(jobId, new Set());
+      gpuCardsByJob.get(jobId).add(gpu);
+    });
+
+    const jobRows = nodeJobs.map((job) => {
+      const id = String(job.jobId);
+      const cards = Array.from(gpuCardsByJob.get(id) || []).sort((a, b) => Number(a) - Number(b));
+      const cardUtils = cards
+        .map((index) => gpus.find((card) => card.index === index)?.utilization)
+        .filter((value) => Number.isFinite(value));
+      return {
+        jobId: id,
+        name: job.name,
+        user: job.user,
+        partition: job.partition,
+        state: job.state,
+        runtime: job.time,
+        reqTres: job.reqTres,
+        cpus: job.cpus,
+        gpus: cards.length || job.gpus || 0,
+        gpuCards: cards,
+        cpuCores: cpuByJob.has(id) ? cpuByJob.get(id) : null,
+        memoryBytes: memByJob.has(id) ? memByJob.get(id) : null,
+        gpuMemoryBytes: gpuMemByJob.has(id) ? gpuMemByJob.get(id) : null,
+        gpuUtilization: cardUtils.length ? cardUtils.reduce((sum, value) => sum + value, 0) / cardUtils.length : null,
+      };
+    }).sort((a, b) => (b.cpuCores || 0) - (a.cpuCores || 0));
+
+    res.json({
+      node: {
+        name: node.name,
+        state: node.state,
+        partitions: node.partition ? node.partition.split(',').filter(Boolean) : [],
+        cpus: node.cpus,
+        gres: node.gres,
+        gpusTotal: node.gpusTotal || 0,
+        gpusAllocated: node.gpusAllocated || 0,
+        memoryTotalMb: node.memoryTotalMb || null,
+        memoryAllocatedMb: node.memoryAllocatedMb || null,
+        reason: node.reason || null,
+        load: node.load,
+      },
+      monitoring: (monitoring && monitoring.nodes?.[nodeName]) || null,
+      rangeSeconds,
+      step,
+      series,
+      gpus,
+      gpuUtilSeries,
+      gpuMemSeries,
+      jobs: jobRows,
+      source: VM_URL,
+    });
+  } catch (err) {
+    const status = err.message === 'Invalid node name' ? 400 : 502;
+    console.error('Failed to read node detail', err.message);
+    res.status(status).json({ error: 'Failed to read node detail', details: err.message });
   }
 });
 

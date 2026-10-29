@@ -21,6 +21,8 @@ export interface NodeInfo {
   gres?: string; // Format: gpu:X
   gpusAllocated?: number;
   gpusTotal?: number;
+  memoryTotalMb?: number;
+  memoryAllocatedMb?: number;
   gpuCards?: Array<{ index: number; jobId?: string; name?: string; user?: string }>;
 }
 
