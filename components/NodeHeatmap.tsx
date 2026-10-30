@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { PartitionStats, NodeState, NodeInfo, ResourceType, JobInfo } from '../types';
-import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User, MemoryStick, HardDrive } from 'lucide-react';
+import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User, MemoryStick, HardDrive, ArrowDownWideNarrow, ArrowUpWideNarrow, ArrowDownAZ } from 'lucide-react';
 import NodeDetailModal from './NodeDetailModal.tsx';
 import { slurmService } from '../services/slurmService.ts';
 import type { NodeMonitoringEntry } from '../services/slurmService.ts';
@@ -12,6 +12,14 @@ interface NodeHeatmapProps {
 }
 
 type GroupByMode = 'partition' | 'type' | 'all' | 'cpu' | 'mem' | 'disk';
+type SortMode = 'name' | 'heatDesc' | 'heatAsc';
+
+// 热度视角下的排序方式：节点名（默认）/ 用量由多到少 / 由少到多
+const SORT_OPTIONS: Array<{ mode: SortMode; label: string; icon: React.ReactNode }> = [
+  { mode: 'name', label: '节点名', icon: <ArrowDownAZ size={12} /> },
+  { mode: 'heatDesc', label: '多 → 少', icon: <ArrowDownWideNarrow size={12} /> },
+  { mode: 'heatAsc', label: '少 → 多', icon: <ArrowUpWideNarrow size={12} /> },
+];
 
 const STATE_COLORS: Record<NodeState, string> = {
   idle: 'text-emerald-400 opacity-60',
@@ -68,6 +76,7 @@ const heatBand = (pct: number | null, bands = HEAT_BANDS) => {
 
 const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
   const [groupBy, setGroupBy] = useState<GroupByMode>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('name');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<Record<string, NodeMonitoringEntry>>({});
@@ -134,9 +143,24 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
         return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     });
 
+    // 按热度排序：无采集数据的节点永远排在最后，其余按所选方向排列（同值时退回节点名）
+    const byName = (a: NodeInfo, b: NodeInfo) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    const sortByHeat = (list: NodeInfo[]) => {
+      if (!isHeatView || sortMode === 'name') return list;
+      const direction = sortMode === 'heatDesc' ? -1 : 1;
+      return [...list].sort((a, b) => {
+        const left = heatValue(a.name);
+        const right = heatValue(b.name);
+        if (left === null && right === null) return byName(a, b);
+        if (left === null) return 1;
+        if (right === null) return -1;
+        return left === right ? byName(a, b) : (left - right) * direction;
+      });
+    };
+
     if (groupBy === 'all' || groupBy === 'cpu' || groupBy === 'mem' || groupBy === 'disk') {
-      const abnormalNodes = allNodes.filter(n => n.state === 'down' || n.state === 'drained');
-      const normalNodes = allNodes.filter(n => n.state !== 'down' && n.state !== 'drained');
+      const abnormalNodes = sortByHeat(allNodes.filter(n => n.state === 'down' || n.state === 'drained'));
+      const normalNodes = sortByHeat(allNodes.filter(n => n.state !== 'down' && n.state !== 'drained'));
       const titles: Record<string, { alert: string; total: string; type: string }> = {
         all: { alert: 'Abnormal Nodes | 异常节点', total: 'Cluster Status | 节点状态', type: 'TOTAL' },
         cpu: { alert: 'Abnormal Nodes | 异常节点', total: 'CPU Utilization Heat | CPU 使用率热度', type: 'HEAT' },
@@ -186,55 +210,80 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
       type: p.type,
       nodes: (p.nodes || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     })).filter(g => g.nodes.length > 0);
-  }, [partitions, groupBy]);
+  }, [partitions, groupBy, sortMode, coverage, isHeatView]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24">
       {/* View Switchers */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex flex-col items-start gap-2 shrink-0">
         <div className="flex bg-slate-200/50 p-1 rounded-xl border border-slate-200 w-fit shrink-0">
           <button 
             onClick={() => setGroupBy('all')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <LayoutGrid size={14} />
             Status
           </button>
           <button 
             onClick={() => setGroupBy('partition')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'partition' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'partition' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <Layers size={14} />
             Partitions
           </button>
           <button 
             onClick={() => setGroupBy('type')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'type' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'type' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <Box size={14} />
             Resource
           </button>
           <button 
             onClick={() => setGroupBy('cpu')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'cpu' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'cpu' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <Cpu size={14} />
             CPU 热度
           </button>
           <button 
             onClick={() => setGroupBy('mem')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'mem' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'mem' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <MemoryStick size={14} />
             内存热度
           </button>
           <button 
             onClick={() => setGroupBy('disk')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'disk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black whitespace-nowrap transition-all ${groupBy === 'disk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <HardDrive size={14} />
             磁盘热度
           </button>
+        </div>
+
+        {isHeatView && (
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">排序</span>
+            <div className="flex bg-slate-200/50 p-0.5 rounded-lg border border-slate-200">
+              {SORT_OPTIONS.map((option) => (
+                <button
+                  key={option.mode}
+                  onClick={() => setSortMode(option.mode)}
+                  title={
+                    option.mode === 'name' ? '按节点名称排序'
+                      : option.mode === 'heatDesc' ? '按用量从多到少排序（无数据的节点排在最后）'
+                        : '按用量从少到多排序（无数据的节点排在最后）'
+                  }
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black whitespace-nowrap transition-all ${sortMode === option.mode ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {option.icon}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
 
         {/* Legend */}
