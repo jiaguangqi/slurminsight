@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { PartitionStats, NodeState, NodeInfo, ResourceType, JobInfo } from '../types';
-import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User } from 'lucide-react';
+import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User, MemoryStick } from 'lucide-react';
 import NodeDetailModal from './NodeDetailModal.tsx';
 import { slurmService } from '../services/slurmService.ts';
 import type { NodeMonitoringEntry } from '../services/slurmService.ts';
@@ -11,7 +11,7 @@ interface NodeHeatmapProps {
   jobs: JobInfo[];
 }
 
-type GroupByMode = 'partition' | 'type' | 'all';
+type GroupByMode = 'partition' | 'type' | 'all' | 'cpu' | 'mem';
 
 const STATE_COLORS: Record<NodeState, string> = {
   idle: 'text-emerald-400 opacity-60',
@@ -29,6 +29,22 @@ const CONTAINER_STYLES: Record<NodeState, string> = {
   drained: 'bg-slate-50 border-slate-200',
   down: 'bg-red-50 border-red-200 shadow-inner',
   maint: 'bg-blue-50 border-blue-100'
+};
+
+// 利用率热度：低 → 高的五档配色，无采集数据单独一档
+const HEAT_BANDS = [
+  { min: 90, tile: 'bg-rose-500/25 border-rose-300', icon: 'text-rose-700', label: '≥90%' },
+  { min: 70, tile: 'bg-orange-500/20 border-orange-300', icon: 'text-orange-600', label: '70-90%' },
+  { min: 40, tile: 'bg-amber-400/20 border-amber-300', icon: 'text-amber-600', label: '40-70%' },
+  { min: 10, tile: 'bg-emerald-400/15 border-emerald-200', icon: 'text-emerald-600', label: '10-40%' },
+  { min: -1, tile: 'bg-emerald-50 border-emerald-100', icon: 'text-emerald-500', label: '<10%' },
+];
+
+const NO_DATA_STYLE = { tile: 'bg-slate-50 border-dashed border-slate-200', icon: 'text-slate-300' };
+
+const heatBand = (pct?: number | null) => {
+  if (pct === undefined || pct === null || !Number.isFinite(pct)) return null;
+  return HEAT_BANDS.find((band) => pct >= band.min) || HEAT_BANDS[HEAT_BANDS.length - 1];
 };
 
 const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
@@ -62,6 +78,15 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
     return entries.filter((entry) => states(entry).length > 0).length;
   }, [coverage]);
 
+  const isHeatView = groupBy === 'cpu' || groupBy === 'mem';
+
+  const heatValue = (name: string): number | null => {
+    const entry = coverage[name];
+    if (!entry) return null;
+    const value = groupBy === 'cpu' ? entry.cpuPct : entry.memPct;
+    return value === undefined || value === null || !Number.isFinite(value) ? null : value;
+  };
+
   const groups = useMemo(() => {
     const allNodesMap = new Map<string, NodeInfo & { partitionNames: string[]; type: ResourceType }>();
     
@@ -89,24 +114,30 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
         return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    if (groupBy === 'all') {
+    if (groupBy === 'all' || groupBy === 'cpu' || groupBy === 'mem') {
       const abnormalNodes = allNodes.filter(n => n.state === 'down' || n.state === 'drained');
       const normalNodes = allNodes.filter(n => n.state !== 'down' && n.state !== 'drained');
-      
+      const titles: Record<string, { alert: string; total: string; type: string }> = {
+        all: { alert: 'Abnormal Nodes | 异常节点', total: 'Cluster Status | 节点状态', type: 'TOTAL' },
+        cpu: { alert: 'Abnormal Nodes | 异常节点', total: 'CPU Utilization Heat | CPU 使用率热度', type: 'HEAT' },
+        mem: { alert: 'Abnormal Nodes | 异常节点', total: 'Memory Utilization Heat | 内存使用率热度', type: 'HEAT' },
+      };
+      const naming = titles[groupBy];
+
       const result = [];
       if (abnormalNodes.length > 0) {
-        result.push({ 
-          id: 'abnormal', 
-          title: 'Abnormal Nodes | 异常节点', 
-          type: 'ALERT', 
-          nodes: abnormalNodes 
+        result.push({
+          id: `${groupBy}-abnormal`,
+          title: naming.alert,
+          type: 'ALERT',
+          nodes: abnormalNodes
         });
       }
-      result.push({ 
-        id: 'all', 
-        title: 'Cluster Status | 节点状态', 
-        type: 'TOTAL', 
-        nodes: normalNodes 
+      result.push({
+        id: `${groupBy}-all`,
+        title: naming.total,
+        type: naming.type,
+        nodes: normalNodes
       });
       return result;
     }
@@ -162,22 +193,59 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
             <Box size={14} />
             Resource
           </button>
+          <button 
+            onClick={() => setGroupBy('cpu')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'cpu' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <Cpu size={14} />
+            CPU 热度
+          </button>
+          <button 
+            onClick={() => setGroupBy('mem')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'mem' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <MemoryStick size={14} />
+            内存热度
+          </button>
         </div>
 
         {/* Legend */}
         <div className="bg-white/80 backdrop-blur px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="flex items-center gap-1.5 mr-1">
-            <Info size={12} className="text-slate-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">States</span>
-          </div>
-          {(Object.keys(STATE_COLORS) as NodeState[]).map(state => (
-            <div key={state} className="flex items-center gap-1.5">
-              <Monitor size={12} className={STATE_COLORS[state]} />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                {state === 'allocated' ? 'alloc' : state === 'mixed' ? 'mix' : state}
-              </span>
-            </div>
-          ))}
+          {isHeatView ? (
+            <>
+              <div className="flex items-center gap-1.5 mr-1">
+                <Info size={12} className="text-slate-400" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  {groupBy === 'cpu' ? 'CPU 使用率' : '内存使用率'}
+                </span>
+              </div>
+              {HEAT_BANDS.map((band) => (
+                <div key={band.label} className="flex items-center gap-1.5">
+                  <span className={`w-3.5 h-3.5 rounded border ${band.tile}`} />
+                  <span className="text-[10px] font-bold text-slate-500 tracking-tight">{band.label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <span className={`w-3.5 h-3.5 rounded border ${NO_DATA_STYLE.tile}`} />
+                <span className="text-[10px] font-bold text-slate-500 tracking-tight">无数据</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 mr-1">
+                <Info size={12} className="text-slate-400" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">States</span>
+              </div>
+              {(Object.keys(STATE_COLORS) as NodeState[]).map(state => (
+                <div key={state} className="flex items-center gap-1.5">
+                  <Monitor size={12} className={STATE_COLORS[state]} />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                    {state === 'allocated' ? 'alloc' : state === 'mixed' ? 'mix' : state}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
           <div className="flex items-center gap-1.5 pl-4 border-l border-slate-200">
             <span className="w-2 h-2 rounded-full bg-rose-500" />
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">采集异常</span>
@@ -198,6 +266,9 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
           const isAlert = group.type === 'ALERT';
           const activeCount = group.nodes.filter(n => n.state === 'allocated' || n.state === 'mixed').length;
           const zIndex = activeGroupId === group.id ? 100 : (isAlert ? 10 : 1);
+          const heatValues = isHeatView ? group.nodes.map((node) => heatValue(node.name)).filter((value): value is number => value !== null) : [];
+          const heatAverage = heatValues.length ? heatValues.reduce((sum, value) => sum + value, 0) / heatValues.length : null;
+          const heatMissing = isHeatView ? group.nodes.length - heatValues.length : 0;
 
           return (
             <div 
@@ -222,7 +293,11 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                       {isAlert && <AlertTriangle size={16} className="text-rose-600" />}
                     </div>
                     <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isAlert ? 'text-rose-400' : 'text-slate-400'}`}>
-                      {isAlert ? `${group.nodes.length} Nodes Reported Issues` : `${activeCount} / ${group.nodes.length} Nodes Active`}
+                      {isAlert
+                        ? `${group.nodes.length} Nodes Reported Issues`
+                        : isHeatView
+                          ? `平均 ${heatAverage === null ? '—' : `${heatAverage.toFixed(1)}%`} · ${heatValues.length}/${group.nodes.length} 有数据${heatMissing > 0 ? ` · ${heatMissing} 无采集` : ''}`
+                          : `${activeCount} / ${group.nodes.length} Nodes Active`}
                     </p>
                   </div>
                 </div>
@@ -247,6 +322,15 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                       ].filter(Boolean).join('；')
                     : '';
 
+                  const utilValue = isHeatView ? heatValue(node.name) : null;
+                  const band = isHeatView ? heatBand(utilValue) : null;
+                  const tileStyle = isHeatView
+                    ? (band ? band.tile : NO_DATA_STYLE.tile)
+                    : CONTAINER_STYLES[node.state];
+                  const iconStyle = isHeatView
+                    ? (band ? band.icon : NO_DATA_STYLE.icon)
+                    : STATE_COLORS[node.state];
+
                   return (
                     <div
                       key={`${group.id}-${node.name}-${idx}`}
@@ -256,13 +340,19 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                         type="button"
                         onClick={() => setSelectedNode(node.name)}
                         title={hasIssue ? `点击查看详情 · ${issueTitle}` : '点击查看节点详情'}
-                        className={`p-2 rounded-lg border transition-all duration-200 hover:scale-125 hover:shadow-xl cursor-pointer relative z-10 ${CONTAINER_STYLES[node.state]}`}
+                        className={`w-[42px] h-[38px] rounded-lg border transition-all duration-200 hover:scale-125 hover:shadow-xl cursor-pointer relative z-10 flex items-center justify-center ${tileStyle}`}
                       >
-                        <Monitor 
-                          size={18} 
-                          className={`${STATE_COLORS[node.state]} transition-transform ${node.state === 'down' ? 'animate-pulse' : ''}`} 
-                          strokeWidth={2.5}
-                        />
+                        {isHeatView ? (
+                          <span className={`text-[11px] font-black tabular-nums leading-none ${iconStyle}`}>
+                            {utilValue === null ? '—' : `${Math.round(utilValue)}%`}
+                          </span>
+                        ) : (
+                          <Monitor 
+                            size={18} 
+                            className={`${iconStyle} transition-transform ${node.state === 'down' ? 'animate-pulse' : ''}`} 
+                            strokeWidth={2.5}
+                          />
+                        )}
 
                         {/* ULTRA COMPACT TOOLTIP */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 w-60 bg-slate-900 text-white p-3 rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-all z-[9999] shadow-2xl scale-90 group-hover:scale-100 origin-bottom border border-slate-700 translate-y-2 group-hover:translate-y-0">
@@ -281,6 +371,15 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                             <div className="flex justify-between items-center text-[9px]">
                               <span className="text-slate-500 font-bold uppercase text-[7.5px] tracking-widest">CPU 用量</span>
                               <span className="font-mono font-black text-slate-100">{node.cpus || "0/0/0/0"}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[9px]">
+                              <span className="text-slate-500 font-bold uppercase text-[7.5px] tracking-widest">实时 CPU / 内存</span>
+                              <span className="font-mono font-black text-slate-100 tabular-nums">
+                                {entry?.cpuPct === undefined || entry?.cpuPct === null ? '—' : `${entry.cpuPct.toFixed(1)}%`}
+                                {' / '}
+                                {entry?.memPct === undefined || entry?.memPct === null ? '—' : `${entry.memPct.toFixed(1)}%`}
+                              </span>
                             </div>
 
                             <div className="flex justify-between items-start text-[9px]">

@@ -51,7 +51,7 @@ journalctl -u slurmclusterinsight -n 100     # 或 tail -f logs/app.log
 - 若更换主控机名，需同步修改 `SERVICE_HOSTS`、`SERVICE_UNITS`。
 
 ### 节点详情与采集覆盖（/api/nodes/*）
-- `/api/nodes/monitoring`：按节点返回三类采集器的状态，用于热力图上的红点标记。状态取值 `ok` / `down`（抓取目标存在但失败）/ `missing`（Prometheus 中没有该节点目标）/ `n/a`（非 GPU 节点不判 GPU 采集）。结果缓存 60 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
+- `/api/nodes/monitoring`：按节点返回采集器状态与实时利用率，用于热力图的红点标记和 CPU/内存热度视角。状态取值 `ok` / `down`（抓取目标存在但失败）/ `missing`（Prometheus 中没有该节点目标）/ `n/a`（非 GPU 节点不判 GPU 采集）；`cpuPct` / `memPct` 为该节点当前的 CPU、内存使用率（由 node_exporter 计算，节点无数据时为 `null`）。结果缓存 60 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
 - `/api/nodes/:node/detail?range=300..604800`：单节点详情，包含
   - 时间序列：CPU 使用率、CPU 实际核数、内存使用率/使用量、Load1、网络收发（node_exporter，按 `instance` 选择，node 名→IP 由 `node_uname_info` 解析）；
   - GPU：每张卡的利用率、显存占用/总量、温度、功耗（`DCGM_FI_DEV_*{hostname=...}`），以及每卡历史曲线；

@@ -67,6 +67,8 @@ export interface NodeMonitoringEntry {
   metrics: CollectorState;
   jobs: CollectorState;
   gpu: CollectorState;
+  cpuPct: number | null;
+  memPct: number | null;
 }
 
 export interface NodeMonitoringPayload {

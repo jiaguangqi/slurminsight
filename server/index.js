@@ -1843,22 +1843,37 @@ const collectorState = (target, up) => {
   return up ? 'ok' : 'down';
 };
 
+// 把 by(instance) 的查询结果压成 ip → 数值，供节点热度视图按 IP 取用
+const valueByIp = (rows) => {
+  const map = new Map();
+  rows.forEach((row) => {
+    const ip = String(row.metric?.instance || '').split(':')[0];
+    const value = Number(row.value?.[1]);
+    if (ip && Number.isFinite(value)) map.set(ip, value);
+  });
+  return map;
+};
+
 const selectorFor = (ips, port) => ips.map((ip) => `${ip}:${port}`).join('|');
 
 let monitoringCache = { at: 0, payload: null };
 const MONITORING_TTL_MS = 60 * 1000;
 
 const buildNodeMonitoring = async () => {
-  const [nodes, ips, nodeUpRows, cgroupUpRows, gpuUpRows] = await Promise.all([
+  const [nodes, ips, nodeUpRows, cgroupUpRows, gpuUpRows, cpuRows, memRows] = await Promise.all([
     fetchNodes(),
     loadNodeIps(),
     vmFetch('/api/v1/query', { query: 'up{job="node-export"}' }),
     vmFetch('/api/v1/query', { query: 'up{job="cgroup_exporter"}' }),
     vmFetch('/api/v1/query', { query: 'up{job="gpu_exporter"}' }),
+    vmFetch('/api/v1/query', { query: '100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])))' }).catch(() => []),
+    vmFetch('/api/v1/query', { query: '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)' }).catch(() => []),
   ]);
   const nodeUp = upMap(nodeUpRows, 'instance');
   const cgroupUp = upMap(cgroupUpRows, 'instance');
   const gpuUp = upMap(gpuUpRows, 'hostname');
+  const cpuByIp = valueByIp(cpuRows);
+  const memByIp = valueByIp(memRows);
 
   const entries = {};
   nodes.forEach((node) => {
@@ -1866,11 +1881,17 @@ const buildNodeMonitoring = async () => {
     const metricTarget = nodeIps.map((ip) => `${ip}:${NODE_EXPORTER_PORT}`).find((key) => nodeUp.has(key)) || null;
     const jobTarget = nodeIps.map((ip) => `${ip}:${CGROUP_EXPORTER_PORT}`).find((key) => cgroupUp.has(key)) || null;
     const isGpu = (node.gpusTotal || 0) > 0 || /gpu[:=]/i.test(node.gres || '');
+    const pick = (map) => {
+      const hit = nodeIps.find((ip) => map.has(ip));
+      return hit === undefined ? null : map.get(hit);
+    };
     entries[node.name] = {
       ip: nodeIps[0] || null,
       metrics: collectorState(metricTarget, metricTarget ? nodeUp.get(metricTarget) : false),
       jobs: collectorState(jobTarget, jobTarget ? cgroupUp.get(jobTarget) : false),
       gpu: isGpu ? collectorState(gpuUp.has(node.name) ? node.name : null, gpuUp.get(node.name)) : 'n/a',
+      cpuPct: pick(cpuByIp),
+      memPct: pick(memByIp),
     };
   });
 
