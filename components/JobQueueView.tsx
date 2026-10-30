@@ -1,15 +1,16 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { JobInfo, JobState } from '../types';
-import { Search, Hash, User, Layers, PlayCircle, Clock, AlertCircle, Eye, X, Terminal, MapPin, Box, Calendar, RefreshCw, FileText } from 'lucide-react';
+import { Search, Hash, User, Layers, PlayCircle, Clock, AlertCircle, Eye, X, Terminal, MapPin, Box, Calendar, RefreshCw, FileText, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { slurmService, JobLogPayload } from '../services/slurmService.ts';
+import type { JobUsageSummaryEntry } from '../services/slurmService.ts';
 import JobUsagePanel from './JobUsagePanel.tsx';
 
 interface JobQueueViewProps {
   jobs: JobInfo[];
 }
 
-type SortBy = 'jobId' | 'priority' | 'time';
+type SortBy = 'jobId' | 'priority' | 'time' | 'util';
 type GroupBy = 'all' | 'partition' | 'user';
 
 const STATE_COLORS: Record<JobState, string> = {
@@ -35,6 +36,9 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [groupBy, setGroupBy] = useState<GroupBy>('all');
   const [sortBy, setSortBy] = useState<SortBy>('jobId');
+  const [utilAsc, setUtilAsc] = useState(true);
+  const [usage, setUsage] = useState<Record<string, JobUsageSummaryEntry>>({});
+  const [usageUpdatedAt, setUsageUpdatedAt] = useState<Date | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobInfo | null>(null);
   const [jobScript, setJobScript] = useState('');
   const [scriptLoading, setScriptLoading] = useState(false);
@@ -72,6 +76,17 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
     base.sort((a, b) => {
       if (sortBy === 'jobId') return parseInt(b.jobId) - parseInt(a.jobId);
       if (sortBy === 'priority') return parseFloat(b.priority) - parseFloat(a.priority);
+      if (sortBy === 'util') {
+        const left = usage[a.jobId]?.efficiencyPct;
+        const right = usage[b.jobId]?.efficiencyPct;
+        const hasLeft = typeof left === 'number' && Number.isFinite(left);
+        const hasRight = typeof right === 'number' && Number.isFinite(right);
+        // 无用量数据（未运行或没有采集）的作业始终排在末尾
+        if (!hasLeft && !hasRight) return parseInt(b.jobId) - parseInt(a.jobId);
+        if (!hasLeft) return 1;
+        if (!hasRight) return -1;
+        return utilAsc ? left - right : right - left;
+      }
       return 0;
     });
 
@@ -91,7 +106,24 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
       title: `${groupBy === 'partition' ? 'Partition' : 'User'}: ${key}`,
       jobs: groups[key]
     }));
-  }, [filteredJobs, groupBy, sortBy]);
+  }, [filteredJobs, groupBy, sortBy, usage, utilAsc]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const payload = await slurmService.fetchJobUsageSummary();
+        if (cancelled) return;
+        setUsage(payload?.jobs || {});
+        setUsageUpdatedAt(payload?.updatedAt ? new Date(payload.updatedAt) : new Date());
+      } catch {
+        if (!cancelled) setUsageUpdatedAt(null);
+      }
+    };
+    load();
+    const timer = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,18 +259,26 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Sort By</span>
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-                {(['jobId', 'priority'] as SortBy[]).map((s) => (
+                {(['jobId', 'priority', 'util'] as SortBy[]).map((s) => (
                   <button
                     key={s}
-                    onClick={() => setSortBy(s)}
+                    onClick={() => {
+                      if (s !== 'util') { setSortBy(s); return; }
+                      if (sortBy === 'util') setUtilAsc(!utilAsc);
+                      else { setSortBy('util'); setUtilAsc(true); }
+                    }}
                     className={`px-4 py-1.5 text-xs font-black rounded-lg transition-all ${
                       sortBy === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
                     }`}
+                    title={s === 'util' ? '按资源利用率排序，默认从低到高（低效作业在前）' : undefined}
                   >
-                    {s === 'jobId' ? 'ID' : 'PRI'}
+                    {s === 'jobId' ? 'ID' : s === 'priority' ? 'PRI' : `利用率 ${sortBy === 'util' ? (utilAsc ? '↑' : '↓') : ''}`}
                   </button>
                 ))}
               </div>
+              {usageUpdatedAt && (
+                <span className="text-[10px] font-bold text-slate-400">用量更新于 {usageUpdatedAt.toLocaleTimeString()}</span>
+              )}
             </div>
           </div>
         </div>
@@ -259,7 +299,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse table-fixed min-w-[1200px] text-sm">
+              <table className="w-full text-left border-collapse table-fixed min-w-[1480px] text-sm">
                 <thead>
                   <tr className="bg-slate-50/30">
                     <th className="w-24 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">JOBID</th>
@@ -270,7 +310,20 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                     <th className="w-28 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">STATE</th>
                     <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-right">CPUS</th>
                     <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-right">GPUS</th>
-                    <th className="w-56 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">NODELIST</th>
+                    <th className="w-52 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">
+                      <button
+                        onClick={() => {
+                          if (sortBy === 'util') setUtilAsc(!utilAsc);
+                          else { setSortBy('util'); setUtilAsc(true); }
+                        }}
+                        title="申请资源与实际使用的比值，点击切换排序方向（默认低效在前）"
+                        className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors ${sortBy === 'util' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-700'}`}
+                      >
+                        资源利用率
+                        {sortBy === 'util' ? (utilAsc ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-50" />}
+                      </button>
+                    </th>
+                    <th className="w-44 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">NODELIST</th>
                     <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-center">ACTION</th>
                   </tr>
                 </thead>
@@ -313,6 +366,49 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                           return (
                             <div className="flex items-center justify-end">
                               <span className="font-black text-sm text-slate-700">{gpuVal}</span>
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const entry = usage[job.jobId];
+                          const pct = entry?.efficiencyPct;
+                          if (!entry || pct === undefined || pct === null || !Number.isFinite(pct)) {
+                            return (
+                              <span
+                                className="text-xs font-bold text-slate-300 cursor-help"
+                                title={job.state === 'RUNNING' ? '暂无用量数据：作业可能刚启动，或所在节点未采集 cgroup 指标' : '排队中的作业没有实际用量'}
+                              >
+                                —
+                              </span>
+                            );
+                          }
+                          const isGpu = entry.efficiencyBasis === 'gpu';
+                          const tone = pct < 20 ? 'text-rose-600' : pct < 50 ? 'text-amber-600' : 'text-emerald-600';
+                          const bar = pct < 20 ? 'bg-rose-400' : pct < 50 ? 'bg-amber-400' : 'bg-emerald-400';
+                          const detail = isGpu
+                            ? `${entry.gpuCards} 卡${entry.gpuUtil !== null ? '' : ''}`
+                            : `${entry.cpuCores !== null ? entry.cpuCores.toFixed(1) : '—'} / ${entry.requestedCpus ?? '—'} 核`;
+                          const memory = entry.memoryBytes !== null
+                            ? `内存 ${formatBytes(entry.memoryBytes)}${entry.requestedMemBytes ? ` / 申请 ${formatBytes(entry.requestedMemBytes)}` : ''}`
+                            : '内存数据缺失';
+                          return (
+                            <div
+                              className="min-w-0"
+                              title={`${isGpu ? 'GPU 卡平均利用率' : 'CPU 核数利用率'} ${pct.toFixed(1)}%｜${detail}｜${memory}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`text-sm font-black tabular-nums w-11 text-right ${tone}`}>
+                                  {pct > 999 ? '>999' : pct.toFixed(0)}%
+                                </span>
+                                <div className="flex-1 min-w-[2.5rem] h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+                                </div>
+                              </div>
+                              <div className="mt-0.5 pl-[3.25rem] text-[9px] font-bold text-slate-400 tabular-nums truncate">
+                                {isGpu ? 'GPU' : 'CPU'} · {detail}
+                              </div>
                             </div>
                           );
                         })()}

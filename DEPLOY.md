@@ -50,6 +50,12 @@ journalctl -u slurmclusterinsight -n 100     # 或 tail -f logs/app.log
 - **前置条件**：服务以 root 运行，且 login02 到 mgt03/mgt02 已配置 root 免密 SSH（当前已验证）。主机名在代码 `SERVICE_HOSTS` 白名单中固定，不接受请求参数指定，避免命令注入。
 - 若更换主控机名，需同步修改 `SERVICE_HOSTS`、`SERVICE_UNITS`。
 
+### 作业资源利用率（/api/jobs/usage-summary）
+- 一次查询取回全集群运行作业的实际用量，**不逐作业请求 Prometheus**：`sum by (jobId) (rate(cgroup_cpu_usage_percpu[10m]))/1e9`（缺失时用 `cgroup_cpu_total_seconds` 补齐）、`sum by (jobId) (cgroup_memory_used_bytes)`、`avg_over_time(DCGM_FI_DEV_GPU_UTIL[15m])`。
+- 每作业返回：实际 CPU 核数、申请核数、`cpuPct`、实际/申请内存、GPU 卡平均利用率（卡归属以 Slurm 的 `gres_detail` 为准）、以及综合 `efficiencyPct`——**GPU 作业取卡利用率，其余取 CPU 核数利用率**（GPU 作业申请核数少，用 CPU 比值会误判）。
+- 窗口取 CPU 10 分钟、GPU 15 分钟的平均值，避免瞬时波动把正常作业标成低效；结果缓存 30 秒。
+- 作业队列的"资源利用率"列即由此接口驱动：`<20%` 标红、`<50%` 标橙、其余绿色，表头可点击切换升/降序（默认从低到高，低效作业排在最前），无用量数据的作业恒排末尾。
+
 ### 节点详情与采集覆盖（/api/nodes/*）
 - `/api/nodes/monitoring`：按节点返回采集器状态与实时利用率，用于热力图的红点标记和 CPU/内存热度视角。状态取值 `ok` / `down`（抓取目标存在但失败）/ `missing`（Prometheus 中没有该节点目标）/ `n/a`（非 GPU 节点不判 GPU 采集）；`cpuPct` / `memPct` 为该节点当前的 CPU、内存使用率（由 node_exporter 计算，节点无数据时为 `null`）。结果缓存 60 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
 - `/api/nodes/:node/detail?range=300..604800`：单节点详情，包含

@@ -2107,6 +2107,105 @@ app.get('/api/nodes/:node/detail', requireAuth, async (req, res) => {
   }
 });
 
+// -------- Queue-wide resource efficiency (VictoriaMetrics / Prometheus) --------
+const JOB_USAGE_TTL_MS = 30 * 1000;
+let jobUsageCache = { at: 0, payload: null };
+
+const sumByLabel = (rows, label = 'jobId') => {
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = String(row.metric?.[label] ?? '');
+    const value = Number(row.value?.[1]);
+    if (!key || !Number.isFinite(value)) return;
+    map.set(key, (map.get(key) || 0) + value);
+  });
+  return map;
+};
+
+// 一次查询就能覆盖全集群运行作业，避免逐作业请求 Prometheus。
+const buildJobUsageSummary = async () => {
+  const [jobs, perCpuRows, totalCpuRows, memRows, gpuRows] = await Promise.all([
+    fetchJobs(),
+    vmFetch('/api/v1/query', { query: 'sum by (jobId) (rate(cgroup_cpu_usage_percpu[10m]))/1e9' }).catch(() => []),
+    vmFetch('/api/v1/query', { query: 'sum by (jobId) (rate(cgroup_cpu_total_seconds[10m]))' }).catch(() => []),
+    vmFetch('/api/v1/query', { query: 'sum by (jobId) (cgroup_memory_used_bytes)' }).catch(() => []),
+    vmFetch('/api/v1/query', { query: 'avg_over_time(DCGM_FI_DEV_GPU_UTIL[15m])' }).catch(() => []),
+  ]);
+
+  const cpuByJob = sumByLabel(perCpuRows);
+  // 两套 cgroup CPU 指标单位不同（ns/s 与 s），数值等价，缺失的作业用另一套补齐
+  sumByLabel(totalCpuRows).forEach((value, id) => { if (!cpuByJob.has(id)) cpuByJob.set(id, value); });
+  const memByJob = sumByLabel(memRows);
+
+  const gpuUtilByCard = new Map();
+  gpuRows.forEach((row) => {
+    const host = row.metric?.hostname || row.metric?.Hostname;
+    const gpu = String(row.metric?.gpu ?? '');
+    const value = Number(row.value?.[1]);
+    if (!host || gpu === '' || !Number.isFinite(value)) return;
+    gpuUtilByCard.set(`${host}/${gpu}`, value);
+  });
+
+  // 作业 → GPU 卡：以 Slurm 的 gres_detail 为准（exporter 的映射并不完整）
+  const cardsByJob = new Map();
+  buildGpuCards(jobs).forEach((cards, nodeName) => {
+    cards.forEach((card) => {
+      if (!card.jobId) return;
+      if (!cardsByJob.has(card.jobId)) cardsByJob.set(card.jobId, []);
+      cardsByJob.get(card.jobId).push({ node: nodeName, index: String(card.index) });
+    });
+  });
+
+  const entries = {};
+  jobs.forEach((job) => {
+    if (job.state !== 'RUNNING') return;
+    const id = String(job.jobId);
+    const requestedCpus = Number(job.cpus) || null;
+    const cpuCores = cpuByJob.has(id) ? cpuByJob.get(id) : null;
+    const cards = cardsByJob.get(id) || [];
+    const cardUtils = cards
+      .map((card) => gpuUtilByCard.get(`${card.node}/${card.index}`))
+      .filter((value) => Number.isFinite(value));
+    const gpuUtil = cardUtils.length ? cardUtils.reduce((sum, value) => sum + value, 0) / cardUtils.length : null;
+    const memoryBytes = memByJob.has(id) ? memByJob.get(id) : null;
+    const requestedMemBytes = parseRequestedMemoryBytes(job.reqTres || job.memory || '');
+    const cpuPct = requestedCpus && cpuCores !== null ? (cpuCores / requestedCpus) * 100 : null;
+    // GPU 作业看卡利用率，其余看 CPU 核数利用率
+    const usesGpu = cards.length > 0 && gpuUtil !== null;
+    entries[id] = {
+      cpuCores,
+      requestedCpus,
+      cpuPct,
+      memoryBytes,
+      requestedMemBytes,
+      memPct: requestedMemBytes && memoryBytes !== null ? (memoryBytes / requestedMemBytes) * 100 : null,
+      gpuUtil,
+      gpuCards: cards.length || job.gpus || 0,
+      efficiencyPct: usesGpu ? gpuUtil : cpuPct,
+      efficiencyBasis: usesGpu ? 'gpu' : 'cpu',
+    };
+  });
+
+  return {
+    updatedAt: new Date().toISOString(),
+    source: VM_URL,
+    window: 'cpu 10m / gpu 15m',
+    jobs: entries,
+  };
+};
+
+app.get('/api/jobs/usage-summary', requireAuth, async (_req, res) => {
+  try {
+    if (!jobUsageCache.payload || Date.now() - jobUsageCache.at > JOB_USAGE_TTL_MS) {
+      jobUsageCache = { at: Date.now(), payload: await buildJobUsageSummary() };
+    }
+    res.json(jobUsageCache.payload);
+  } catch (err) {
+    console.error('Failed to build job usage summary', err.message);
+    res.status(502).json({ error: 'Failed to read job usage summary', details: err.message });
+  }
+});
+
 // -------- Job output logs --------
 const LOG_TAIL_BYTES = 96 * 1024;
 

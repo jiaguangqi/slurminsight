@@ -50,6 +50,26 @@ export interface JobLogPayload {
   truncated: boolean;
 }
 
+export interface JobUsageSummaryEntry {
+  cpuCores: number | null;
+  requestedCpus: number | null;
+  cpuPct: number | null;
+  memoryBytes: number | null;
+  requestedMemBytes: number | null;
+  memPct: number | null;
+  gpuUtil: number | null;
+  gpuCards: number;
+  efficiencyPct: number | null;
+  efficiencyBasis: 'cpu' | 'gpu';
+}
+
+export interface JobUsageSummary {
+  updatedAt: string;
+  source: string;
+  window: string;
+  jobs: Record<string, JobUsageSummaryEntry>;
+}
+
 export interface ServiceHostState {
   host: string;
   reachable: boolean;
@@ -535,6 +555,10 @@ class SlurmService {
 
   public async fetchNodeMonitoring(): Promise<NodeMonitoringPayload> {
     return this.fetchJSON<NodeMonitoringPayload>('/nodes/monitoring');
+  }
+
+  public async fetchJobUsageSummary(): Promise<JobUsageSummary> {
+    return this.fetchJSON<JobUsageSummary>('/jobs/usage-summary');
   }
 
   public async fetchNodeDetail(node: string, rangeSeconds = 3600): Promise<NodeDetail> {
