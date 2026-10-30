@@ -89,6 +89,9 @@ export interface NodeMonitoringEntry {
   gpu: CollectorState;
   cpuPct: number | null;
   memPct: number | null;
+  diskPct: number | null;
+  diskFreeBytes: number | null;
+  diskSizeBytes: number | null;
 }
 
 export interface NodeMonitoringPayload {
@@ -155,6 +158,9 @@ export interface NodeDetail {
     memoryPct: NodeMetricSeries;
     memoryUsed: NodeMetricSeries;
     load1: NodeMetricSeries;
+    diskPct: NodeMetricSeries;
+    diskFree: NodeMetricSeries;
+    diskTotal: NodeMetricSeries;
     netRx: NodeMetricSeries;
     netTx: NodeMetricSeries;
   };

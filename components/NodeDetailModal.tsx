@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  X, Monitor, AlertTriangle, Cpu, MemoryStick, Zap, Activity, Network, RefreshCw, Server,
+  X, Monitor, AlertTriangle, Cpu, MemoryStick, Zap, Activity, Network, RefreshCw, Server, HardDrive,
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area,
@@ -205,6 +205,13 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
   const cpuData = toPoints(detail?.series.cpuUtil);
   const memData = toPoints(detail?.series.memoryPct);
   const loadData = toPoints(detail?.series.load1);
+  const diskData = toPoints(detail?.series.diskPct);
+  const diskSummary = useMemo(() => {
+    const free = detail?.series.diskFree?.current ?? null;
+    const total = detail?.series.diskTotal?.current ?? null;
+    if (free === null && total === null) return undefined;
+    return `剩余 ${formatBytes(free)} / 共 ${formatBytes(total)}`;
+  }, [detail]);
   const netData = useMemo(() => {
     const rx = toPoints(detail?.series.netRx);
     const tx = toPoints(detail?.series.netTx);
@@ -371,6 +378,18 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
               unit="B/s"
               formatter={(value) => formatBytes(value, 1)}
               lines={[{ key: 'rx', color: '#0ea5e9' }, { key: 'tx', color: '#a855f7' }]}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <MetricChart
+              title="根目录空间使用率 (/)"
+              icon={<HardDrive size={11} />}
+              data={diskData}
+              dataKey="value"
+              color="#f43f5e"
+              unit={diskSummary}
+              formatter={(value) => `${value.toFixed(1)}%`}
             />
           </div>
 

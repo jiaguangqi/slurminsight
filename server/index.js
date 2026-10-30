@@ -1860,7 +1860,7 @@ let monitoringCache = { at: 0, payload: null };
 const MONITORING_TTL_MS = 60 * 1000;
 
 const buildNodeMonitoring = async () => {
-  const [nodes, ips, nodeUpRows, cgroupUpRows, gpuUpRows, cpuRows, memRows] = await Promise.all([
+  const [nodes, ips, nodeUpRows, cgroupUpRows, gpuUpRows, cpuRows, memRows, diskFreeRows, diskSizeRows] = await Promise.all([
     fetchNodes(),
     loadNodeIps(),
     vmFetch('/api/v1/query', { query: 'up{job="node-export"}' }),
@@ -1868,12 +1868,17 @@ const buildNodeMonitoring = async () => {
     vmFetch('/api/v1/query', { query: 'up{job="gpu_exporter"}' }),
     vmFetch('/api/v1/query', { query: '100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])))' }).catch(() => []),
     vmFetch('/api/v1/query', { query: '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)' }).catch(() => []),
+    // 根目录（/）空间：一个节点一个挂载点，取可用量与总量在 JS 侧算占用率
+    vmFetch('/api/v1/query', { query: 'node_filesystem_avail_bytes{mountpoint="/"}' }).catch(() => []),
+    vmFetch('/api/v1/query', { query: 'node_filesystem_size_bytes{mountpoint="/"}' }).catch(() => []),
   ]);
   const nodeUp = upMap(nodeUpRows, 'instance');
   const cgroupUp = upMap(cgroupUpRows, 'instance');
   const gpuUp = upMap(gpuUpRows, 'hostname');
   const cpuByIp = valueByIp(cpuRows);
   const memByIp = valueByIp(memRows);
+  const diskFreeByIp = valueByIp(diskFreeRows);
+  const diskSizeByIp = valueByIp(diskSizeRows);
 
   const entries = {};
   nodes.forEach((node) => {
@@ -1885,6 +1890,8 @@ const buildNodeMonitoring = async () => {
       const hit = nodeIps.find((ip) => map.has(ip));
       return hit === undefined ? null : map.get(hit);
     };
+    const diskFreeBytes = pick(diskFreeByIp);
+    const diskSizeBytes = pick(diskSizeByIp);
     entries[node.name] = {
       ip: nodeIps[0] || null,
       metrics: collectorState(metricTarget, metricTarget ? nodeUp.get(metricTarget) : false),
@@ -1892,6 +1899,9 @@ const buildNodeMonitoring = async () => {
       gpu: isGpu ? collectorState(gpuUp.has(node.name) ? node.name : null, gpuUp.get(node.name)) : 'n/a',
       cpuPct: pick(cpuByIp),
       memPct: pick(memByIp),
+      diskPct: diskFreeBytes !== null && diskSizeBytes ? 100 * (1 - diskFreeBytes / diskSizeBytes) : null,
+      diskFreeBytes,
+      diskSizeBytes,
     };
   });
 
@@ -1943,6 +1953,9 @@ app.get('/api/nodes/:node/detail', requireAuth, async (req, res) => {
           memoryPct: `100 * (1 - node_memory_MemAvailable_bytes{instance=~"${metricSel}"} / node_memory_MemTotal_bytes{instance=~"${metricSel}"})`,
           memoryUsed: `node_memory_MemTotal_bytes{instance=~"${metricSel}"} - node_memory_MemAvailable_bytes{instance=~"${metricSel}"}`,
           load1: `node_load1{instance=~"${metricSel}"}`,
+          diskPct: `100 * (1 - node_filesystem_avail_bytes{mountpoint="/",instance=~"${metricSel}"} / node_filesystem_size_bytes{mountpoint="/",instance=~"${metricSel}"})`,
+          diskFree: `node_filesystem_avail_bytes{mountpoint="/",instance=~"${metricSel}"}`,
+          diskTotal: `node_filesystem_size_bytes{mountpoint="/",instance=~"${metricSel}"}`,
           netRx: `sum(rate(node_network_receive_bytes_total{instance=~"${metricSel}",device!~"lo|veth.*|docker.*|br-.*|virbr.*|cali.*|flannel.*"}[2m]))`,
           netTx: `sum(rate(node_network_transmit_bytes_total{instance=~"${metricSel}",device!~"lo|veth.*|docker.*|br-.*|virbr.*|cali.*|flannel.*"}[2m]))`,
         }
@@ -1981,7 +1994,7 @@ app.get('/api/nodes/:node/detail', requireAuth, async (req, res) => {
     ]);
 
     const series = {};
-    const SERIES_KEYS = ['cpuUtil', 'cpuCores', 'memoryPct', 'memoryUsed', 'load1', 'netRx', 'netTx'];
+    const SERIES_KEYS = ['cpuUtil', 'cpuCores', 'memoryPct', 'memoryUsed', 'load1', 'diskPct', 'diskFree', 'diskTotal', 'netRx', 'netTx'];
     SERIES_KEYS.forEach((key) => { series[key] = emptySeries; });
     seriesPairs.forEach(([key, points]) => { series[key] = { points, ...summarizeSeries(points) }; });
 

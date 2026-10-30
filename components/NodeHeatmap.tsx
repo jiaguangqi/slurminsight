@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { PartitionStats, NodeState, NodeInfo, ResourceType, JobInfo } from '../types';
-import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User, MemoryStick } from 'lucide-react';
+import { LayoutGrid, Layers, Box, Info, Monitor, AlertTriangle, Hash, Cpu, Zap, User, MemoryStick, HardDrive } from 'lucide-react';
 import NodeDetailModal from './NodeDetailModal.tsx';
 import { slurmService } from '../services/slurmService.ts';
 import type { NodeMonitoringEntry } from '../services/slurmService.ts';
@@ -11,7 +11,7 @@ interface NodeHeatmapProps {
   jobs: JobInfo[];
 }
 
-type GroupByMode = 'partition' | 'type' | 'all' | 'cpu' | 'mem';
+type GroupByMode = 'partition' | 'type' | 'all' | 'cpu' | 'mem' | 'disk';
 
 const STATE_COLORS: Record<NodeState, string> = {
   idle: 'text-emerald-400 opacity-60',
@@ -40,11 +40,30 @@ const HEAT_BANDS = [
   { min: -1, tile: 'bg-emerald-50 border-emerald-100', icon: 'text-emerald-500', label: '<10%' },
 ];
 
+// 磁盘热度：写满才会出事（根分区满会拖垮登录与新作业），分档比 CPU/内存更靠上，
+// 让「已经填得比较满」的节点也有独立一档，而不是全图一片浅绿。
+const DISK_BANDS = [
+  { min: 90, tile: 'bg-rose-500/25 border-rose-300', icon: 'text-rose-700', label: '≥90%' },
+  { min: 70, tile: 'bg-orange-500/20 border-orange-300', icon: 'text-orange-600', label: '70-90%' },
+  { min: 50, tile: 'bg-amber-400/20 border-amber-300', icon: 'text-amber-600', label: '50-70%' },
+  { min: 20, tile: 'bg-emerald-400/15 border-emerald-200', icon: 'text-emerald-600', label: '20-50%' },
+  { min: -1, tile: 'bg-emerald-50 border-emerald-100', icon: 'text-emerald-500', label: '<20%' },
+];
+
 const NO_DATA_STYLE = { tile: 'bg-slate-50 border-dashed border-slate-200', icon: 'text-slate-300' };
 
-const heatBand = (pct?: number | null) => {
+const formatDiskSize = (bytes?: number | null) => {
+  if (bytes === undefined || bytes === null || !Number.isFinite(bytes)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let size = Math.abs(bytes);
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) { size /= 1024; index += 1; }
+  return `${size.toFixed(index <= 1 ? 0 : 1)} ${units[index]}`;
+};
+
+const heatBand = (pct: number | null, bands = HEAT_BANDS) => {
   if (pct === undefined || pct === null || !Number.isFinite(pct)) return null;
-  return HEAT_BANDS.find((band) => pct >= band.min) || HEAT_BANDS[HEAT_BANDS.length - 1];
+  return bands.find((band) => pct >= band.min) || bands[bands.length - 1];
 };
 
 const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
@@ -78,12 +97,13 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
     return entries.filter((entry) => states(entry).length > 0).length;
   }, [coverage]);
 
-  const isHeatView = groupBy === 'cpu' || groupBy === 'mem';
+  const isHeatView = groupBy === 'cpu' || groupBy === 'mem' || groupBy === 'disk';
+  const heatBands = groupBy === 'disk' ? DISK_BANDS : HEAT_BANDS;
 
   const heatValue = (name: string): number | null => {
     const entry = coverage[name];
     if (!entry) return null;
-    const value = groupBy === 'cpu' ? entry.cpuPct : entry.memPct;
+    const value = groupBy === 'cpu' ? entry.cpuPct : groupBy === 'mem' ? entry.memPct : entry.diskPct;
     return value === undefined || value === null || !Number.isFinite(value) ? null : value;
   };
 
@@ -114,13 +134,14 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
         return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     });
 
-    if (groupBy === 'all' || groupBy === 'cpu' || groupBy === 'mem') {
+    if (groupBy === 'all' || groupBy === 'cpu' || groupBy === 'mem' || groupBy === 'disk') {
       const abnormalNodes = allNodes.filter(n => n.state === 'down' || n.state === 'drained');
       const normalNodes = allNodes.filter(n => n.state !== 'down' && n.state !== 'drained');
       const titles: Record<string, { alert: string; total: string; type: string }> = {
         all: { alert: 'Abnormal Nodes | 异常节点', total: 'Cluster Status | 节点状态', type: 'TOTAL' },
         cpu: { alert: 'Abnormal Nodes | 异常节点', total: 'CPU Utilization Heat | CPU 使用率热度', type: 'HEAT' },
         mem: { alert: 'Abnormal Nodes | 异常节点', total: 'Memory Utilization Heat | 内存使用率热度', type: 'HEAT' },
+        disk: { alert: 'Abnormal Nodes | 异常节点', total: 'Root Filesystem Usage Heat | 根目录空间使用热度', type: 'HEAT' },
       };
       const naming = titles[groupBy];
 
@@ -207,6 +228,13 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
             <MemoryStick size={14} />
             内存热度
           </button>
+          <button 
+            onClick={() => setGroupBy('disk')}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black transition-all ${groupBy === 'disk' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <HardDrive size={14} />
+            磁盘热度
+          </button>
         </div>
 
         {/* Legend */}
@@ -216,10 +244,10 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
               <div className="flex items-center gap-1.5 mr-1">
                 <Info size={12} className="text-slate-400" />
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                  {groupBy === 'cpu' ? 'CPU 使用率' : '内存使用率'}
+                  {groupBy === 'cpu' ? 'CPU 使用率' : groupBy === 'mem' ? '内存使用率' : '根目录 (/) 占用'}
                 </span>
               </div>
-              {HEAT_BANDS.map((band) => (
+              {heatBands.map((band) => (
                 <div key={band.label} className="flex items-center gap-1.5">
                   <span className={`w-3.5 h-3.5 rounded border ${band.tile}`} />
                   <span className="text-[10px] font-bold text-slate-500 tracking-tight">{band.label}</span>
@@ -323,7 +351,7 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                     : '';
 
                   const utilValue = isHeatView ? heatValue(node.name) : null;
-                  const band = isHeatView ? heatBand(utilValue) : null;
+                  const band = isHeatView ? heatBand(utilValue, heatBands) : null;
                   const tileStyle = isHeatView
                     ? (band ? band.tile : NO_DATA_STYLE.tile)
                     : CONTAINER_STYLES[node.state];
@@ -379,6 +407,14 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                                 {entry?.cpuPct === undefined || entry?.cpuPct === null ? '—' : `${entry.cpuPct.toFixed(1)}%`}
                                 {' / '}
                                 {entry?.memPct === undefined || entry?.memPct === null ? '—' : `${entry.memPct.toFixed(1)}%`}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[9px]">
+                              <span className="text-slate-500 font-bold uppercase text-[7.5px] tracking-widest">根目录 (/)</span>
+                              <span className="font-mono font-black text-slate-100 tabular-nums">
+                                {entry?.diskPct === undefined || entry?.diskPct === null ? '—' : `${entry.diskPct.toFixed(1)}%`}
+                                {entry?.diskFreeBytes !== undefined && entry?.diskFreeBytes !== null ? ` · 剩 ${formatDiskSize(entry.diskFreeBytes)}` : ''}
                               </span>
                             </div>
 

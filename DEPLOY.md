@@ -57,9 +57,11 @@ journalctl -u slurmclusterinsight -n 100     # 或 tail -f logs/app.log
 - 作业队列的"资源利用率"列即由此接口驱动：`<20%` 标红、`<50%` 标橙、其余绿色，表头可点击切换升/降序（默认从低到高，低效作业排在最前），无用量数据的作业恒排末尾。
 
 ### 节点详情与采集覆盖（/api/nodes/*）
-- `/api/nodes/monitoring`：按节点返回采集器状态与实时利用率，用于热力图的红点标记和 CPU/内存热度视角。状态取值 `ok` / `down`（抓取目标存在但失败）/ `missing`（Prometheus 中没有该节点目标）/ `n/a`（非 GPU 节点不判 GPU 采集）；`cpuPct` / `memPct` 为该节点当前的 CPU、内存使用率（由 node_exporter 计算，节点无数据时为 `null`）。结果缓存 60 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
+- `/api/nodes/monitoring`：按节点返回采集器状态与实时利用率，用于热力图的红点标记和 CPU/内存/磁盘热度视角。状态取值 `ok` / `down`（抓取目标存在但失败）/ `missing`（Prometheus 中没有该节点目标）/ `n/a`（非 GPU 节点不判 GPU 采集）；`cpuPct` / `memPct` 为该节点当前的 CPU、内存使用率（由 node_exporter 计算，节点无数据时为 `null`）；`diskPct` / `diskFreeBytes` / `diskSizeBytes` 为根目录 `/` 的占用率与可用量/总量（`node_filesystem_avail_bytes` / `node_filesystem_size_bytes{mountpoint="/"}`，占用率在服务端用两者相除得出，避免两次查询口径不一致）。结果缓存 60 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
 - `/api/nodes/:node/detail?range=300..604800`：单节点详情，包含
-  - 时间序列：CPU 使用率、CPU 实际核数、内存使用率/使用量、Load1、网络收发（node_exporter，按 `instance` 选择，node 名→IP 由 `node_uname_info` 解析）；
+  - 时间序列：CPU 使用率、CPU 实际核数、内存使用率/使用量、Load1、根目录占用率与可用/总量、网络收发（node_exporter，按 `instance` 选择，node 名→IP 由 `node_uname_info` 解析）；
+  - GPU：每张卡的利用率、显存占用/总量、温度、功耗（`DCGM_FI_DEV_*{hostname=...}`），以及每卡历史曲线；
+  - 运行中的作业：Slurm 作业列表 + 每作业实际 CPU 核数、内存（cgroup exporter）、占用卡号（以 Slurm 的 `gres_detail` 为准，exporter 的 `node_cr_gpu_jobinfo` 仅作补充）、单作业 GPU 利用率。
   - GPU：每张卡的利用率、显存占用/总量、温度、功耗（`DCGM_FI_DEV_*{hostname=...}`），以及每卡历史曲线；
   - 运行中的作业：Slurm 作业列表 + 每作业实际 CPU 核数、内存（cgroup exporter）、占用卡号（以 Slurm 的 `gres_detail` 为准，exporter 的 `node_cr_gpu_jobinfo` 仅作补充）、单作业 GPU 利用率。
 - **cgroup 指标差异**：部分节点只暴露 `cgroup_cpu_total_seconds`（单位秒，速率即核数），另一些节点是 `cgroup_cpu_usage_percpu`（纳秒，需除以 1e9）。服务端会先试后者，为空时回退前者。作业资源查询 `/api/jobs/:jobId/usage` 采用同样的回退逻辑。

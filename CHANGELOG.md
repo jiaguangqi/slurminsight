@@ -3,6 +3,30 @@
 本项目的所有重要变更都记录在此文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+主题是**把 Prometheus 数据用起来**：节点级下钻、热度视角与作业资源利用率，都建立在已对接的
+VictoriaMetrics/Prometheus 之上，并与 Slurm 自身的分配数据交叉印证。
+
+### 新增
+
+- **节点详情弹窗**（`/api/nodes/:node/detail`）：Heatmap 上任意节点方块点击即弹出，展示 CPU / 内存 / 负载 /
+  根目录 / 网络（GPU 节点另有逐卡利用率与显存）的时间曲线、实时指标卡，以及该节点上运行中作业的实际
+  CPU / 内存 / GPU 占用。
+- **采集覆盖红点**（`/api/nodes/monitoring`）：节点方块下方的小圆点表示 node_exporter / cgroup_exporter /
+  DCGM exporter 三路采集中有缺失，红色为未采集、橙色为抓取失败；弹窗内给出具体是哪一路、可能原因与 Slurm 侧状态。
+- **Node Heatmap 热度视角**：新增「CPU 热度」「内存热度」「磁盘热度」三个视角，按使用率分档着色，卡片副标题
+  显示分组平均值与有数据节点数，无采集数据的节点单独一档。
+- **根目录空间使用与曲线**：「磁盘热度」展示各节点 `/` 的占用率（悬停可见剩余空间），节点详情新增
+  `根目录空间使用率 (/)` 曲线（`node_filesystem_avail_bytes` / `node_filesystem_size_bytes`）。
+- **作业队列「资源利用率」列**（`/api/jobs/usage-summary`）：一次查询返回全部运行作业的申请 vs 实际对比，
+  列可按利用率排序（默认低效在前）。CPU 作业看核数利用率，GPU 作业看所占用卡的平均利用率；低于 20% 标红、
+  低于 50% 标橙，用来一眼捞出占着资源不干活的作业。
+
+### 说明
+
+- 节点名↔抓取目标映射依赖 `node_uname_info`（缓存 5 分钟）；节点级采集数据缓存 60 秒，作业用量缓存 30 秒。
+
 ## [2.0.0] - 2026-10-21
 
 这一版的核心是**数据准确性**与**运维可见性**：排队/占用数字与 Grafana 对齐，新增服务健康页与按 GPU 卡的分配视图，
