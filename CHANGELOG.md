@@ -3,30 +3,67 @@
 本项目的所有重要变更都记录在此文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [2.1.0] - 2026-10-30
 
-主题是**把 Prometheus 数据用起来**：节点级下钻、热度视角与作业资源利用率，都建立在已对接的
-VictoriaMetrics/Prometheus 之上，并与 Slurm 自身的分配数据交叉印证。
+这一版的核心是**对接 Prometheus 作为第二数据源**。在此之前，面板只能看到 Slurm 自己知道的"分配了多少"；
+接入 Prometheus 之后，才能看到节点上"实际用了多少"，于是有了节点级下钻、CPU/内存/磁盘热度视角，
+以及用「申请 vs 实际」直接暴露低效作业的利用率列。
 
-### 新增
+### 一、数据源：对接 VictoriaMetrics / Prometheus
 
-- **节点详情弹窗**（`/api/nodes/:node/detail`）：Heatmap 上任意节点方块点击即弹出，展示 CPU / 内存 / 负载 /
-  根目录 / 网络（GPU 节点另有逐卡利用率与显存）的时间曲线、实时指标卡，以及该节点上运行中作业的实际
-  CPU / 内存 / GPU 占用。
-- **采集覆盖红点**（`/api/nodes/monitoring`）：节点方块下方的小圆点表示 node_exporter / cgroup_exporter /
-  DCGM exporter 三路采集中有缺失，红色为未采集、橙色为抓取失败；弹窗内给出具体是哪一路、可能原因与 Slurm 侧状态。
-- **Node Heatmap 热度视角**：新增「CPU 热度」「内存热度」「磁盘热度」三个视角，按使用率分档着色，卡片副标题
-  显示分组平均值与有数据节点数，无采集数据的节点单独一档。热度视角下可按「节点名 / 多 → 少 / 少 → 多」排序，
-  快速定位用量最高与最低的节点；无采集数据的节点在两个方向上都排在末尾，异常节点分组固定在顶部。
-- **根目录空间使用与曲线**：「磁盘热度」展示各节点 `/` 的占用率（悬停可见剩余空间），节点详情新增
-  `根目录空间使用率 (/)` 曲线（`node_filesystem_avail_bytes` / `node_filesystem_size_bytes`）。
-- **作业队列「资源利用率」列**（`/api/jobs/usage-summary`）：一次查询返回全部运行作业的申请 vs 实际对比，
-  列可按利用率排序（默认低效在前）。CPU 作业看核数利用率，GPU 作业看所占用卡的平均利用率；低于 20% 标红、
-  低于 50% 标橙，用来一眼捞出占着资源不干活的作业。
+地址由环境变量 `VM_URL` 指定（默认 `http://172.22.2.150:8428`），直接调用其 Prometheus 兼容 HTTP API
+（`/api/v1/query`、`/api/v1/query_range`），8 秒超时；任何一个 exporter 不可用时只让对应字段为空，
+不影响 Slurm 侧数据展示。
+
+#### 对接的 exporter
+
+| exporter | Prometheus job | 端口 | 抓取目标 | 用到的指标 |
+| --- | --- | --- | --- | --- |
+| node_exporter | `node-export` | 9100 | 303（含登录/管理节点） | `node_cpu_seconds_total`、`node_memory_MemAvailable_bytes` / `node_memory_MemTotal_bytes`、`node_load1`、`node_network_receive_bytes_total` / `node_network_transmit_bytes_total`、`node_filesystem_avail_bytes` / `node_filesystem_size_bytes`、`node_uname_info` |
+| cgroup_exporter | `cgroup_exporter` | 1999 | 299 | `cgroup_cpu_usage_percpu`、`cgroup_cpu_total_seconds`、`cgroup_memory_used_bytes`（带 `jobId` 标签，可落到单个作业） |
+| DCGM exporter | `gpu_exporter` | 9400 | 30 节点 / 209 张卡 | `DCGM_FI_DEV_GPU_UTIL`、`FB_USED`、`FB_FREE`、`GPU_TEMP`、`POWER_USAGE` |
+| 节点侧 GPU 作业映射 | `node-export` | 9100 | 同上 | `node_cr_gpu_jobinfo`、`node_cr_job_gpu_memory`（节点上自建导出器，用于把作业号对到卡号） |
+
+集群实测分布：H100 80GB HBM3 × 96、H200 × 16、Tesla V100-SXM2-32GB × 88、Tesla V100-PCIE-32GB × 9。
+
+#### 对接中处理的几个实际问题
+
+- **节点名 ↔ 抓取目标的映射**：Prometheus 上只有 `node_uname_info` 同时带 `nodename` 和 `instance`，
+  其余节点指标只有 IP（`instance`）。因此用 `node_uname_info` 建立 node → IP 映射并缓存 5 分钟，
+  再用 IP 去匹配其他指标；这样既支持多 IP 节点，也不依赖抓取配置里的标签约定。
+- **采集覆盖判定**：用 `up{job="node-export"}`、`up{job="cgroup_exporter"}`、`up{job="gpu_exporter"}`
+  判断三路采集，取值为 `ok` / `down`（目标存在但抓取失败）/ `missing`（Prometheus 里没有该节点目标）/ `n/a`。
+  这就是热力图上红点（未采集）与橙点（抓取失败）的来源。
+- **cgroup 指标口径不统一**：部分节点只暴露 `cgroup_cpu_total_seconds`（单位秒，速率即核数），
+  另一些是 `cgroup_cpu_usage_percpu`（纳秒，需除以 1e9）。服务端先试后者，为空时自动回退前者，
+  避免这些节点上作业 CPU 显示为空。
+- **核数聚合方式**：`avg(rate(node_cpu_seconds_total{mode!="idle"}))` 得到的是单核比例（如 0.14）而不是
+  核数，必须用 `sum(...)` 才是"实际使用了多少核"。
+- **GPU 作业与卡号的对应**：以 Slurm 的 `gres_detail` 索引区间为准，exporter 的 `node_cr_gpu_jobinfo`
+  仅作补充——部分节点上该指标没有 `job_id`，单靠它会把作业和卡对错。
+- **统计窗口**：队列利用率列用 CPU 10 分钟、GPU 15 分钟的平均值（避免瞬时抖动把正常作业误判为低效），
+  节点详情曲线支持 1H/6H/24H，步长 `max(60, range/120)`。
+
+### 二、新增功能
+
+- **节点详情弹窗**（`/api/nodes/:node/detail`）：Heatmap 上任意节点方块点击即弹出，展示 CPU 使用率 /
+  CPU 实际核数 / 内存使用率与使用量 / Load1 / 根目录占用 / 网络收发的时间曲线，GPU 节点另有逐卡利用率与
+  显存曲线，以及该节点上运行中作业的实际 CPU / 内存 / GPU 占用。
+- **采集覆盖红点**（`/api/nodes/monitoring`）：节点方块下方的小圆点表示三路采集中有缺失，红色为未采集、
+  橙色为抓取失败；点开弹窗会说明具体是哪一路、可能原因（未部署 / 未启动 / 主机不可达）与 Slurm 侧状态。
+- **Node Heatmap 热度视角**：新增「CPU 热度」「内存热度」「磁盘热度」三个视角，按使用率分档着色，
+  卡片副标题显示分组平均值与有数据节点数，无采集数据的节点单独一档。热度视角下可按
+  「节点名 / 多 → 少 / 少 → 多」排序，无采集数据的节点在两个方向上都排在末尾，异常节点分组固定置顶。
+- **根目录空间使用与曲线**：「磁盘热度」展示各节点 `/` 的占用率（悬停可见剩余空间与总量），
+  节点详情新增 `根目录空间使用率 (/)` 曲线。
+- **作业队列「资源利用率」列**（`/api/jobs/usage-summary`）：一次查询返回全部运行作业的「申请 vs 实际」
+  对比，列可按利用率排序（默认低效在前）。CPU 作业看核数利用率，GPU 作业看所占用卡的平均利用率；
+  低于 20% 标红、低于 50% 标橙，用来一眼捞出占着资源不干活的作业。
 
 ### 说明
 
-- 节点名↔抓取目标映射依赖 `node_uname_info`（缓存 5 分钟）；节点级采集数据缓存 60 秒，作业用量缓存 30 秒。
+- 节点级采集数据缓存 60 秒，作业用量汇总缓存 30 秒，`node_uname_info` 的 node→IP 映射缓存 5 分钟。
+- 采集覆盖是"按 Prometheus 有没有数据"判定的，因此既能发现采集器没装 / 没起，也能发现主机本身不可达。
 
 ## [2.0.0] - 2026-10-21
 
