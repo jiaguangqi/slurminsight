@@ -17,7 +17,7 @@ const STATE_COLORS: Record<JobState, string> = {
   RUNNING: 'text-emerald-600 bg-emerald-50 border-emerald-100',
   PENDING: 'text-amber-600 bg-amber-50 border-amber-100',
   COMPLETING: 'text-blue-600 bg-blue-50 border-blue-100',
-  CONFIGURING: 'text-slate-400 bg-slate-50 border-slate-100',
+  CONFIGURING: 'text-slate-500 bg-slate-50 border-slate-100',
   SUSPENDED: 'text-rose-600 bg-rose-50 border-rose-100'
 };
 
@@ -213,7 +213,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input 
                 type="text" 
                 placeholder="Job ID, Name, or User..."
@@ -229,7 +229,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={`px-4 py-1.5 text-xs font-black rounded-lg transition-all ${
-                    statusFilter === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                    statusFilter === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'
                   }`}
                 >
                   {s}
@@ -240,14 +240,14 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
 
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Group By</span>
+              <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Group By</span>
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                 {(['all', 'partition', 'user'] as GroupBy[]).map((g) => (
                   <button
                     key={g}
                     onClick={() => setGroupBy(g)}
                     className={`px-4 py-1.5 text-xs font-black rounded-lg transition-all capitalize ${
-                      groupBy === g ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                      groupBy === g ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'
                     }`}
                   >
                     {g}
@@ -257,7 +257,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Sort By</span>
+              <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Sort By</span>
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                 {(['jobId', 'priority', 'util'] as SortBy[]).map((s) => (
                   <button
@@ -268,7 +268,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                       else { setSortBy('util'); setUtilAsc(true); }
                     }}
                     className={`px-4 py-1.5 text-xs font-black rounded-lg transition-all ${
-                      sortBy === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                      sortBy === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'
                     }`}
                     title={s === 'util' ? '按资源利用率排序，默认从低到高（低效作业在前）' : undefined}
                   >
@@ -277,7 +277,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                 ))}
               </div>
               {usageUpdatedAt && (
-                <span className="text-[10px] font-bold text-slate-400">用量更新于 {usageUpdatedAt.toLocaleTimeString()}</span>
+                <span className="text-[10px] font-bold text-slate-500">用量更新于 {usageUpdatedAt.toLocaleTimeString()}</span>
               )}
             </div>
           </div>
@@ -302,29 +302,29 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
               <table className="w-full text-left border-collapse table-fixed min-w-[1480px] text-sm">
                 <thead>
                   <tr className="bg-slate-50/30">
-                    <th className="w-24 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">JOBID</th>
-                    <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">NAME</th>
-                    <th className="w-32 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">PRIORITY</th>
-                    <th className="w-40 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">USER</th>
-                    <th className="w-40 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">PARTITION</th>
-                    <th className="w-28 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">STATE</th>
-                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-right">CPUS</th>
-                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-right">GPUS</th>
-                    <th className="w-52 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">
+                    <th className="w-24 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">JOBID</th>
+                    <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">NAME</th>
+                    <th className="w-32 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">PRIORITY</th>
+                    <th className="w-40 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">USER</th>
+                    <th className="w-40 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">PARTITION</th>
+                    <th className="w-28 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">STATE</th>
+                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider text-right">CPUS</th>
+                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider text-right">GPUS</th>
+                    <th className="w-52 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">
                       <button
                         onClick={() => {
                           if (sortBy === 'util') setUtilAsc(!utilAsc);
                           else { setSortBy('util'); setUtilAsc(true); }
                         }}
                         title="申请资源与实际使用的比值，点击切换排序方向（默认低效在前）"
-                        className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors ${sortBy === 'util' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-700'}`}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors ${sortBy === 'util' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                       >
                         资源利用率
                         {sortBy === 'util' ? (utilAsc ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} className="opacity-50" />}
                       </button>
                     </th>
-                    <th className="w-44 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider">NODELIST</th>
-                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider text-center">ACTION</th>
+                    <th className="w-44 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">NODELIST</th>
+                    <th className="w-20 px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider text-center">ACTION</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -406,7 +406,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                                   <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
                                 </div>
                               </div>
-                              <div className="mt-0.5 pl-[3.25rem] text-[9px] font-bold text-slate-400 tabular-nums truncate">
+                              <div className="mt-0.5 pl-[3.25rem] text-[9px] font-bold text-slate-500 tabular-nums truncate">
                                 {isGpu ? 'GPU' : 'CPU'} · {detail}
                               </div>
                             </div>
@@ -425,7 +425,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                       <td className="px-6 py-4 text-center">
                         <button 
                           onClick={() => setSelectedJob(job)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                           title="View Details"
                         >
                           <Eye size={14} />
@@ -451,12 +451,12 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">Job Details | 作业详情</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">JobID: {selectedJob.jobId}</p>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mt-0.5">JobID: {selectedJob.jobId}</p>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedJob(null)}
-                className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-400 hover:text-slate-900"
+                className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-500 hover:text-slate-900"
               >
                 <X size={24} />
               </button>
@@ -478,7 +478,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                 </div>
                 <div className="space-y-2 flex-1 min-h-0 flex flex-col">
                   <div className="flex items-center justify-between shrink-0">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">作业脚本</span>
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">作业脚本</span>
                     {scriptLoading && <span className="text-[11px] font-black text-blue-600">加载中...</span>}
                   </div>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex-1 min-h-[10rem] overflow-y-auto">
@@ -494,8 +494,8 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
               {/* Log viewer */}
               <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[520px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50">
                 <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2 shrink-0 bg-white">
-                  <FileText size={14} className="text-slate-400" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">作业监控</span>
+                  <FileText size={14} className="text-slate-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">作业监控</span>
                   <div className="ml-auto flex bg-slate-100 rounded-lg p-0.5">
                     <button
                       onClick={() => selectPanel('usage')}
@@ -539,7 +539,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                         <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                         自动 5s
                       </button>
-                      <span className="ml-auto text-[10px] font-mono text-slate-400">
+                      <span className="ml-auto text-[10px] font-mono text-slate-500">
                         {logData ? `${formatBytes(logData.size)}${logData.truncated ? ' · 尾部' : ''}` : ''}
                       </span>
                     </div>
@@ -553,15 +553,15 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                           ? (logData.exists ? (logData.content || '（文件为空）') : '（日志文件尚未生成）')
                           : '加载中…'}
                     </pre>
-                    <div className="px-4 py-2 border-t border-slate-200 bg-white text-[10px] font-mono text-slate-400 truncate shrink-0" title={logData?.path || ''}>
+                    <div className="px-4 py-2 border-t border-slate-200 bg-white text-[10px] font-mono text-slate-500 truncate shrink-0" title={logData?.path || ''}>
                       {logData?.path || '—'}
                     </div>
                   </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400 px-6 text-center">
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500 px-6 text-center">
                     <Terminal size={28} className="text-slate-300" />
                     <p className="text-xs font-black text-slate-500">选择一个日志查看</p>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">输出日志 / 错误日志，打开后每 5 秒自动刷新，也可手动刷新。</p>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">输出日志 / 错误日志，打开后每 5 秒自动刷新，也可手动刷新。</p>
                   </div>
                 )}
               </div>
@@ -575,7 +575,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
 
 const DetailRow: React.FC<{ label: string; value: string; isFullWidth?: boolean; isStatus?: boolean; status?: JobState; isCode?: boolean }> = ({ label, value, isFullWidth, isStatus, status, isCode }) => (
   <div className={`${isFullWidth ? 'col-span-full' : ''} flex flex-col gap-1`}>
-    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}：</span>
+    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{label}：</span>
     {isStatus && status ? (
       <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black border w-fit ${stateColor(status)}`}>
         {value}

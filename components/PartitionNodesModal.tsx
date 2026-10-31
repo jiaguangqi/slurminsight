@@ -81,7 +81,7 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-black text-slate-900 tracking-tight truncate">{partition.name}</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mt-0.5">
                 {partition.type} 分区 · {nodes.length} 个节点
                 {isGpu && summary.gpus > 0 ? ` · GPU 已分配 ${summary.gpusAllocated} / ${summary.gpus} 张` : ''}
               </p>
@@ -89,7 +89,7 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-400 hover:text-slate-900 shrink-0"
+            className="p-2 hover:bg-slate-200 rounded-xl transition-all text-slate-500 hover:text-slate-900 shrink-0"
           >
             <X size={20} />
           </button>
@@ -104,13 +104,13 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
               </span>
             ))}
           {isGpu && (
-            <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 ml-1">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 ml-1">
               <i className="inline-block w-3 h-3 rounded border bg-emerald-50 border-emerald-100" />空闲
               <i className="inline-block w-3 h-3 rounded border bg-rose-500/15 border-rose-200 ml-2" />已分配
             </span>
           )}
           <div className="ml-auto relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               value={term}
               onChange={(e) => setTerm(e.target.value)}
@@ -122,7 +122,7 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
 
         <div className="flex-1 min-h-0 overflow-y-auto px-7 py-4">
           {visible.length === 0 ? (
-            <p className="py-10 text-center text-xs font-bold text-slate-400">
+            <p className="py-10 text-center text-xs font-bold text-slate-500">
               {nodes.length === 0 ? '该分区暂无节点数据' : '没有匹配的节点'}
             </p>
           ) : (
@@ -187,7 +187,7 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
                         </span>
                       </div>
                     )}
-                    <span className="w-24 shrink-0 text-right text-[10px] font-bold text-slate-400 truncate" title={showGpu ? `CPU ${alloc}/${total}` : gres}>
+                    <span className="w-24 shrink-0 text-right text-[10px] font-bold text-slate-500 truncate" title={showGpu ? `CPU ${alloc}/${total}` : gres}>
                       {showGpu ? `CPU ${alloc}/${total}` : (gres ? gres.replace(/\(S:[^)]*\)/g, '') : '—')}
                     </span>
                     {node.reason && (node.state === 'drained' || node.state === 'down') && (
@@ -212,7 +212,7 @@ const PartitionNodesModal: React.FC<PartitionNodesModalProps> = ({ partition, on
               <>
                 <span className="font-black text-violet-700">{selected.jobId}</span>
                 <span className="font-bold text-slate-700 truncate max-w-[16rem]" title={selected.name}>{selected.name}</span>
-                <span className="text-slate-400">用户 {selected.user}</span>
+                <span className="text-slate-500">用户 {selected.user}</span>
               </>
             ) : (
               <span className="font-bold text-emerald-600">空闲</span>

@@ -127,7 +127,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
           
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input 
                 type="text" 
                 placeholder="Search partitions..."
@@ -143,7 +143,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                   key={f}
                   onClick={() => setResourceFilter(f as any)}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                    resourceFilter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                    resourceFilter === f ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'
                   }`}
                 >
                   {f}
@@ -155,7 +155,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
 
         <div className="flex flex-col xl:flex-row gap-6 pt-6 border-t border-slate-50">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2">Quick Range:</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2">Quick Range:</span>
             {[
               { label: '24H', days: 1 },
               { label: 'WEEK', days: 7 },
@@ -180,9 +180,9 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
 
           <div className="flex-1 flex flex-wrap items-center gap-3 xl:justify-end">
             <div className="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
-              <Clock size={14} className="text-slate-400" />
+              <Clock size={14} className="text-slate-500" />
               <div className="flex flex-col">
-                <label className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Start Time</label>
+                <label className="text-[8px] font-black text-slate-500 uppercase leading-none mb-1">Start Time</label>
                 <input 
                   type="datetime-local" 
                   className="bg-transparent border-none outline-none text-[11px] font-bold text-slate-700 p-0"
@@ -192,7 +192,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
               </div>
               <div className="h-4 w-px bg-slate-200 mx-2"></div>
               <div className="flex flex-col">
-                <label className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">End Time</label>
+                <label className="text-[8px] font-black text-slate-500 uppercase leading-none mb-1">End Time</label>
                 <input 
                   type="datetime-local" 
                   className="bg-transparent border-none outline-none text-[11px] font-bold text-slate-700 p-0"
@@ -229,11 +229,11 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                   <h3 className="font-black text-slate-800 text-sm truncate group-hover:text-blue-600 transition-colors" title={pInfo.name}>
                     {pInfo.name}
                   </h3>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{pInfo.type}</p>
+                  <p className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">{pInfo.type}</p>
                 </div>
                 <button 
                   onClick={() => setSelectedPartition(pInfo.name)}
-                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors ml-2 shrink-0 opacity-0 group-hover:opacity-100"
+                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors ml-2 shrink-0 opacity-0 group-hover:opacity-100"
                   title="Detailed View"
                 >
                   <Maximize2 size={14} />
@@ -244,21 +244,21 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                 {data.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis dataKey="time" hide={true} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9 }} width={44} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 9 }} width={44} />
                       <Tooltip 
                         contentStyle={{ backgroundColor: '#fff', borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '10px' }}
                         labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
                       />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} />
-                      <Line name="Total" type="stepAfter" dataKey="total" stroke="#94a3b8" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
+                      <Line name="Total" type="stepAfter" dataKey="total" stroke="#475569" strokeWidth={1} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={false} />
                       <Line name="Used" type="monotone" dataKey="allocated" stroke={mainColor} strokeWidth={2} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
                       <Line name="Queued" type="monotone" dataKey="pending" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-[10px] text-slate-400 italic">
+                  <div className="h-full flex items-center justify-center text-[10px] text-slate-500 italic">
                     Data not available
                   </div>
                 )}
@@ -269,7 +269,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
 
         {partitionNames.length === 0 && (
           <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-            <p className="text-slate-400 font-medium">No partitions matching your search criteria.</p>
+            <p className="text-slate-500 font-medium">No partitions matching your search criteria.</p>
           </div>
         )}
       </div>
@@ -286,15 +286,15 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                 <div>
                   <h2 className="text-3xl font-black text-slate-900 tracking-tight">{selectedPartitionData.name}</h2>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{selectedPartitionData.type} Resource</span>
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">{selectedPartitionData.type} Resource</span>
                     <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                    <span className="text-xs font-bold text-slate-400">Detailed Time Series Analysis</span>
+                    <span className="text-xs font-bold text-slate-500">Detailed Time Series Analysis</span>
                   </div>
                 </div>
               </div>
               <button 
                 onClick={() => setSelectedPartition(null)}
-                className="p-3 hover:bg-slate-200 rounded-2xl transition-all text-slate-400 hover:text-slate-900"
+                className="p-3 hover:bg-slate-200 rounded-2xl transition-all text-slate-500 hover:text-slate-900"
               >
                 <X size={28} />
               </button>
@@ -315,19 +315,19 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                           <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis 
                         dataKey="time" 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
+                        tick={{ fill: '#475569', fontSize: 11, fontWeight: 'bold' }} 
                         dy={15}
                         minTickGap={60}
                       />
                       <YAxis 
                         axisLine={false} 
                         tickLine={false} 
-                        tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} 
+                        tick={{ fill: '#475569', fontSize: 11, fontWeight: 'bold' }} 
                         label={{ value: selectedPartitionData.type === ResourceType.GPU ? 'Cards' : 'Cores', angle: -90, position: 'insideLeft', offset: 0, fill: '#cbd5e1', fontSize: 11, fontWeight: 'black' }}
                       />
                       <Tooltip 
@@ -365,7 +365,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-400">
+                  <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-500">
                     <div className="bg-slate-100 p-6 rounded-full">
                       <Calendar size={48} className="text-slate-200" />
                     </div>
@@ -381,22 +381,22 @@ const HistoryView: React.FC<HistoryViewProps> = ({ history }) => {
                  {selectedPartitionData.data.length > 0 && (
                    <>
                      <div className="flex flex-col">
-                       <span className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mb-1">Max Utilization</span>
+                       <span className="text-slate-500 font-bold uppercase text-[10px] tracking-widest mb-1">Max Utilization</span>
                        <span className={`text-2xl font-black ${Math.max(...selectedPartitionData.data.map(d => d.utilization)) > 90 ? 'text-rose-500' : 'text-slate-900'}`}>
                          {Math.max(...selectedPartitionData.data.map(d => d.utilization)).toFixed(1)}%
                        </span>
                      </div>
                      <div className="flex flex-col border-l border-slate-200 pl-10">
-                       <span className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mb-1">Average Load</span>
+                       <span className="text-slate-500 font-bold uppercase text-[10px] tracking-widest mb-1">Average Load</span>
                        <span className="text-2xl font-black text-slate-900">
-                         {(selectedPartitionData.data.reduce((acc, d) => acc + d.allocated, 0) / (selectedPartitionData.data.length || 1)).toFixed(1)} <span className="text-sm text-slate-400 font-medium">{selectedPartitionData.type === ResourceType.GPU ? 'Cards' : 'Cores'}</span>
+                         {(selectedPartitionData.data.reduce((acc, d) => acc + d.allocated, 0) / (selectedPartitionData.data.length || 1)).toFixed(1)} <span className="text-sm text-slate-500 font-medium">{selectedPartitionData.type === ResourceType.GPU ? 'Cards' : 'Cores'}</span>
                        </span>
                      </div>
                    </>
                  )}
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Filter View</p>
+                <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Current Filter View</p>
                 <p className="text-slate-600 font-bold text-sm">{dateRange.start.toLocaleString()} — {dateRange.end.toLocaleString()}</p>
               </div>
             </div>

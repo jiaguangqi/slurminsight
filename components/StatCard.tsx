@@ -31,13 +31,13 @@ const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick, onNodesClick
     <div className={`bg-white rounded-2xl p-4 border transition-all duration-300 hover:shadow-xl ${getBorderColor()}`}>
       <div className="flex justify-between items-start mb-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{stats.type}</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest truncate">{stats.type}</p>
           <h3 className="text-sm font-black text-slate-800 truncate" title={stats.name}>{stats.name}</h3>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onNodesClick?.(stats)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all"
             title={`查看 ${stats.name} 的节点`}
           >
             <Server size={14} />
@@ -51,7 +51,7 @@ const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick, onNodesClick
       <div className="space-y-3">
         <div className="flex justify-between items-end">
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-slate-400">USED / TOTAL</span>
+            <span className="text-[10px] font-bold text-slate-500">USED / TOTAL</span>
             <span className="text-xs font-black text-slate-700">{stats.allocated} / {stats.total}</span>
           </div>
           <div className="text-right">
@@ -71,7 +71,7 @@ const StatCard: React.FC<StatCardProps> = ({ stats, onPendingClick, onNodesClick
         <div className="flex items-center justify-between pt-1 border-t border-slate-50 mt-2">
           <div className="flex items-center gap-1">
              <div className={`w-1.5 h-1.5 rounded-full ${isHigh ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-             <span className="text-[10px] font-bold text-slate-400 uppercase">{isHigh ? 'High Load' : 'Available'}</span>
+             <span className="text-[10px] font-bold text-slate-500 uppercase">{isHigh ? 'High Load' : 'Available'}</span>
           </div>
           {stats.pending > 0 && (
             <button

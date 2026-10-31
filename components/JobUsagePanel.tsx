@@ -41,8 +41,8 @@ const formatPercent = (value: number | null) => (value === null || value === und
 const GPU_COLORS = ['#10b981', '#ec4899', '#f59e0b', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6', '#84cc16'];
 
 const TOOLTIP_STYLE = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 11 };
-const TOOLTIP_LABEL_STYLE = { color: '#64748b' };
-const AXIS_TICK = { fill: '#94a3b8', fontSize: 9 };
+const TOOLTIP_LABEL_STYLE = { color: '#475569' };
+const AXIS_TICK = { fill: '#475569', fontSize: 9 };
 
 const chartTime = (ts: number) => {
   const date = new Date(ts);
@@ -98,8 +98,8 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-200 shrink-0">
-        <Activity size={12} className="text-slate-400" />
-        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">时间范围</span>
+        <Activity size={12} className="text-slate-500" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">时间范围</span>
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           {RANGES.map((range) => (
             <button
@@ -130,15 +130,15 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
 
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-white border border-slate-100 p-3">
-            <div className="flex items-center gap-1.5 text-slate-400">
+            <div className="flex items-center gap-1.5 text-slate-500">
               <Cpu size={11} />
               <span className="text-[9px] font-black uppercase tracking-widest">CPU</span>
             </div>
             <p className="mt-1.5 text-lg font-black text-slate-900 leading-none">
               {formatCores(cpu?.current ?? null)}
-              <span className="text-[10px] font-bold text-slate-400 ml-1">/ {cpu?.allocated ?? '—'} 核</span>
+              <span className="text-[10px] font-bold text-slate-500 ml-1">/ {cpu?.allocated ?? '—'} 核</span>
             </p>
-            <p className="mt-1 text-[10px] font-bold text-slate-400">
+            <p className="mt-1 text-[10px] font-bold text-slate-500">
               均值 {formatCores(cpu?.average ?? null)} · 峰值 {formatCores(cpu?.peak ?? null)}
             </p>
             <p className={`mt-0.5 text-[10px] font-black ${cpuPercent !== null && cpuPercent > 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -147,15 +147,15 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
           </div>
 
           <div className="rounded-xl bg-white border border-slate-100 p-3">
-            <div className="flex items-center gap-1.5 text-slate-400">
+            <div className="flex items-center gap-1.5 text-slate-500">
               <HardDrive size={11} />
               <span className="text-[9px] font-black uppercase tracking-widest">内存</span>
             </div>
             <p className="mt-1.5 text-lg font-black text-slate-900 leading-none">
               {formatBytes(memory?.peak ?? null)}
-              <span className="text-[10px] font-bold text-slate-400 ml-1">峰值</span>
+              <span className="text-[10px] font-bold text-slate-500 ml-1">峰值</span>
             </p>
-            <p className="mt-1 text-[10px] font-bold text-slate-400">
+            <p className="mt-1 text-[10px] font-bold text-slate-500">
               申请 {formatBytes(memory?.requestedBytes ?? null)}
             </p>
             <p className="mt-0.5 text-[10px] font-black text-blue-600">
@@ -165,7 +165,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
         </div>
 
         <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">CPU 实际使用（核）</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-1.5">CPU 实际使用（核）</p>
           <div className="h-32 w-full">
             {hasCpuSeries ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -176,7 +176,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                       <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
@@ -185,18 +185,18 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                     contentStyle={TOOLTIP_STYLE}
                     labelStyle={TOOLTIP_LABEL_STYLE}
                   />
-                  {cpu?.allocated ? <ReferenceLine y={cpu.allocated} stroke="#cbd5e1" strokeDasharray="5 4" /> : null}
+                  {cpu?.allocated ? <ReferenceLine y={cpu.allocated} stroke="#94a3b8" strokeDasharray="5 4" /> : null}
                   <Area type="monotone" dataKey="cpuCores" stroke="#0ea5e9" strokeWidth={1.8} fill="url(#jobCpuFill)" isAnimationActive={false} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无 CPU 采样数据</div>
+              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-500">暂无 CPU 采样数据</div>
             )}
           </div>
         </div>
 
         <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">内存实际使用</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-1.5">内存实际使用</p>
           <div className="h-32 w-full">
             {hasMemorySeries ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -207,7 +207,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
                   <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
@@ -220,7 +220,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无内存采样数据</div>
+              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-500">暂无内存采样数据</div>
             )}
           </div>
         </div>
@@ -228,8 +228,8 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
         {(gpus.length > 0 || requestedGpus > 0) && (
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <Zap size={11} className="text-slate-400" />
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              <Zap size={11} className="text-slate-500" />
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-600">
                 GPU（设备利用率）{requestedGpus > 0 ? `· 监控映射 ${gpus.length} / 申请 ${requestedGpus}` : ''}
               </p>
             </div>
@@ -244,7 +244,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                   <span className="text-[10px] font-mono font-bold text-slate-700">{gpu.hostname} / GPU {gpu.gpu}</span>
                   <span className="flex items-center gap-3 text-[10px] font-black">
                     <span className="text-emerald-600">{formatPercent(gpu.utilization)}</span>
-                    <span className="text-slate-400">{formatBytes(gpu.memoryBytes)}</span>
+                    <span className="text-slate-500">{formatBytes(gpu.memoryBytes)}</span>
                   </span>
                 </div>
               ))}
@@ -256,13 +256,13 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
           <>
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap size={11} className="text-slate-400" />
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">GPU 利用率曲线</p>
+                <Zap size={11} className="text-slate-500" />
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-600">GPU 利用率曲线</p>
               </div>
               <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={gpuUtilSeries} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
                     <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(value) => `${value}%`} tick={AXIS_TICK} axisLine={false} tickLine={false} width={40} />
                     <Tooltip
@@ -282,14 +282,14 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
 
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap size={11} className="text-slate-400" />
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">GPU 显存曲线（作业占用）</p>
+                <Zap size={11} className="text-slate-500" />
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-600">GPU 显存曲线（作业占用）</p>
               </div>
               <div className="h-32 w-full">
                 {hasGpuMemorySeries ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={gpuMemorySeries} margin={{ top: 4, right: 6, left: 2, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
                       <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                       <Tooltip
@@ -305,14 +305,14 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无显存采样数据</div>
+                  <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-500">暂无显存采样数据</div>
                 )}
               </div>
             </div>
           </>
         )}
 
-        <p className="text-[9px] font-bold text-slate-400 leading-relaxed pt-1">
+        <p className="text-[9px] font-bold text-slate-500 leading-relaxed pt-1">
           CPU 由 cgroup 累计时间换算为核数，内存为 cgroup 实际占用；申请值来自 Slurm 请求。GPU 利用率为整卡设备指标，显存为作业级统计。数据每 10 秒刷新。
         </p>
       </div>

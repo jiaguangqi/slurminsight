@@ -100,11 +100,11 @@ const MetricChart: React.FC<{
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4">
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+        <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-600 uppercase tracking-wider">
           {icon}
           {title}
         </div>
-        {unit && <span className="text-[10px] font-bold text-slate-400">{unit}</span>}
+        {unit && <span className="text-[10px] font-bold text-slate-500">{unit}</span>}
       </div>
       <div className="h-32">
         {hasData ? (
@@ -116,9 +116,9 @@ const MetricChart: React.FC<{
                   <stop offset="95%" stopColor={color} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: '#94a3b8' }} minTickGap={40} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} width={58} axisLine={false} tickLine={false} tickFormatter={(value) => (formatter ? formatter(Number(value)) : String(value))} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="ts" tickFormatter={formatTime} tick={{ fontSize: 9, fill: '#475569' }} minTickGap={40} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 9, fill: '#475569' }} width={58} axisLine={false} tickLine={false} tickFormatter={(value) => (formatter ? formatter(Number(value)) : String(value))} />
               <Tooltip
                 labelFormatter={(value) => new Date(Number(value)).toLocaleTimeString()}
                 formatter={(value: number, name: string) => [formatter ? formatter(value) : value, name]}
@@ -143,12 +143,12 @@ const MetricChart: React.FC<{
 
 const StatTile: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode; tone?: string }> = ({ label, value, sub, icon, tone }) => (
   <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
-    <div className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${tone || 'text-slate-400'}`}>
+    <div className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${tone || 'text-slate-500'}`}>
       {icon}
       {label}
     </div>
     <div className="mt-1.5 text-lg font-black text-slate-900 tabular-nums leading-none">{value}</div>
-    {sub && <div className="mt-1 text-[10px] font-bold text-slate-400 tabular-nums">{sub}</div>}
+    {sub && <div className="mt-1 text-[10px] font-bold text-slate-500 tabular-nums">{sub}</div>}
   </div>
 );
 
@@ -247,7 +247,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
                   </span>
                 )}
               </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-0.5 truncate">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mt-0.5 truncate">
                 {(node?.partitions?.length ? node.partitions.join(' · ') : '未分配分区')}
                 {isGpu ? ` · GPU ${gpusAllocated}/${gpusTotal} 张` : ''}
                 {refreshedAt ? ` · 更新于 ${refreshedAt.toLocaleTimeString()}` : ''}
@@ -266,10 +266,10 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
                 </button>
               ))}
             </div>
-            <button onClick={() => load(range, true)} className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all" title="立即刷新">
+            <button onClick={() => load(range, true)} className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all" title="立即刷新">
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-all">
+            <button onClick={onClose} className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all">
               <X size={20} />
             </button>
           </div>
@@ -402,19 +402,19 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
                       <span className="flex items-center gap-1.5 text-[11px] font-black text-slate-700">
                         <Zap size={11} className="text-purple-500" /> GPU {card.index}
                       </span>
-                      <span className="text-[10px] font-bold text-slate-400 truncate max-w-[7rem]" title={card.modelName}>{card.modelName || ''}</span>
+                      <span className="text-[10px] font-bold text-slate-500 truncate max-w-[7rem]" title={card.modelName}>{card.modelName || ''}</span>
                     </div>
                     <div className="mt-2 flex items-baseline gap-1">
                       <span className="text-base font-black text-slate-900 tabular-nums">{formatPercent(card.utilization)}</span>
-                      <span className="text-[10px] font-bold text-slate-400">利用率</span>
+                      <span className="text-[10px] font-bold text-slate-500">利用率</span>
                     </div>
                     <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                       <div className="h-full rounded-full bg-purple-400" style={{ width: `${Math.min(100, Math.max(0, card.utilization || 0))}%` }} />
                     </div>
-                    <div className="mt-1.5 text-[10px] font-bold text-slate-400 tabular-nums">
+                    <div className="mt-1.5 text-[10px] font-bold text-slate-500 tabular-nums">
                       显存 {formatBytes(card.memoryUsedBytes)} / {formatBytes(card.memoryTotalBytes)}
                     </div>
-                    <div className="mt-0.5 text-[10px] font-bold text-slate-400 tabular-nums">
+                    <div className="mt-0.5 text-[10px] font-bold text-slate-500 tabular-nums">
                       {card.temperature !== undefined ? `${card.temperature.toFixed(0)}°C` : '—'}
                       {card.powerWatts !== undefined ? ` · ${card.powerWatts.toFixed(0)} W` : ''}
                     </div>
@@ -451,7 +451,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
               <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500">
                 <Server size={12} /> 运行中的作业
               </div>
-              <span className="text-[10px] font-black text-slate-400">{(detail?.jobs || []).length} 个</span>
+              <span className="text-[10px] font-black text-slate-500">{(detail?.jobs || []).length} 个</span>
             </div>
             {(detail?.jobs || []).length === 0 ? (
               <p className="py-8 text-center text-[11px] font-bold text-slate-300">该节点当前没有运行中的作业</p>
@@ -459,7 +459,7 @@ const NodeDetailModal: React.FC<NodeDetailModalProps> = ({ nodeName, fallback, o
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <tr className="bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-500">
                       <th className="px-4 py-2.5">作业</th>
                       <th className="px-3 py-2.5">用户</th>
                       <th className="px-3 py-2.5 text-right">CPU 实际</th>

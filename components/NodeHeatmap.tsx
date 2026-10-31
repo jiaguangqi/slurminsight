@@ -25,7 +25,7 @@ const STATE_COLORS: Record<NodeState, string> = {
   idle: 'text-emerald-400 opacity-60',
   allocated: 'text-orange-600', 
   mixed: 'text-orange-400',
-  drained: 'text-slate-400',
+  drained: 'text-slate-500',
   down: 'text-red-700',
   maint: 'text-blue-500'
 };
@@ -264,7 +264,7 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
 
         {isHeatView && (
           <div className="flex items-center gap-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">排序</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">排序</span>
             <div className="flex bg-slate-200/50 p-0.5 rounded-lg border border-slate-200">
               {SORT_OPTIONS.map((option) => (
                 <button
@@ -291,8 +291,8 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
           {isHeatView ? (
             <>
               <div className="flex items-center gap-1.5 mr-1">
-                <Info size={12} className="text-slate-400" />
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                <Info size={12} className="text-slate-500" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
                   {groupBy === 'cpu' ? 'CPU 使用率' : groupBy === 'mem' ? '内存使用率' : '根目录 (/) 占用'}
                 </span>
               </div>
@@ -310,8 +310,8 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
           ) : (
             <>
               <div className="flex items-center gap-1.5 mr-1">
-                <Info size={12} className="text-slate-400" />
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">States</span>
+                <Info size={12} className="text-slate-500" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">States</span>
               </div>
               {(Object.keys(STATE_COLORS) as NodeState[]).map(state => (
                 <div key={state} className="flex items-center gap-1.5">
@@ -369,7 +369,7 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                       </h4>
                       {isAlert && <AlertTriangle size={16} className="text-rose-600" />}
                     </div>
-                    <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isAlert ? 'text-rose-400' : 'text-slate-400'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isAlert ? 'text-rose-500' : 'text-slate-500'}`}>
                       {isAlert
                         ? `${group.nodes.length} Nodes Reported Issues`
                         : isHeatView
@@ -521,7 +521,7 @@ const NodeHeatmap: React.FC<NodeHeatmapProps> = ({ partitions, jobs }) => {
                         </div>
                       </button>
                       
-                      <span className={`mt-1 text-[9px] font-bold truncate w-full text-center group-hover:text-slate-900 group-hover:font-black transition-all ${node.state === 'down' ? 'text-rose-600' : 'text-slate-400'}`}>
+                      <span className={`mt-1 text-[9px] font-bold truncate w-full text-center group-hover:text-slate-900 group-hover:font-black transition-all ${node.state === 'down' ? 'text-rose-600' : 'text-slate-500'}`}>
                         {node.name}
                       </span>
                       {hasIssue && (

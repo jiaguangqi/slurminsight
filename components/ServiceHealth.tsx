@@ -31,7 +31,7 @@ const SERVICE_LABELS: Record<string, string> = {
 const serviceTone = (unit: string, state: string) => {
   if (state === 'active') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   if (state === 'failed' || state === 'error') return 'bg-rose-50 text-rose-700 border-rose-100';
-  if (unit === 'slurmd' || unit === 'mariadb' || unit === 'mysqld') return 'bg-slate-50 text-slate-400 border-slate-100';
+  if (unit === 'slurmd' || unit === 'mariadb' || unit === 'mysqld') return 'bg-slate-50 text-slate-500 border-slate-100';
   return 'bg-amber-50 text-amber-700 border-amber-100';
 };
 
@@ -39,9 +39,9 @@ const StatTile: React.FC<{ label: string; value: string; hint?: string; tone?: '
   <div className={`rounded-2xl border p-4 ${
     tone === 'bad' ? 'border-rose-200 bg-rose-50/60' : tone === 'warn' ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white'
   }`}>
-    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">{label}</p>
     <p className={`mt-1.5 text-xl font-black leading-none ${tone === 'bad' ? 'text-rose-700' : tone === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</p>
-    {hint && <p className="mt-1 text-[10px] font-bold text-slate-400">{hint}</p>}
+    {hint && <p className="mt-1 text-[10px] font-bold text-slate-500">{hint}</p>}
   </div>
 );
 
@@ -103,7 +103,7 @@ const ServiceHealth: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           {lastSync && (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
               <Clock size={14} /> {lastSync.toLocaleTimeString()}
             </span>
           )}
@@ -111,7 +111,7 @@ const ServiceHealth: React.FC = () => {
             onClick={refreshAll}
             disabled={loading}
             className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-sm transition-all shadow-sm ${
-              loading ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-95'
+              loading ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-900 text-white hover:bg-slate-800 active:scale-95'
             }`}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -146,7 +146,7 @@ const ServiceHealth: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-lg font-black text-slate-900 leading-tight">{host.host}</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{role} Controller</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">{role} Controller</p>
                   </div>
                 </div>
                 <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black ${
@@ -175,7 +175,7 @@ const ServiceHealth: React.FC = () => {
                 </div>
               )}
 
-              <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-slate-400">
+              <div className="mt-4 flex items-center justify-between text-[10px] font-bold text-slate-500">
                 <span className="truncate">slurmctld.log</span>
                 <span className="shrink-0 ml-3">
                   {ctldLog ? `${bytes(ctldLog.size)} · ${new Date(ctldLog.mtime).toLocaleString()}` : '无法读取'}
@@ -191,7 +191,7 @@ const ServiceHealth: React.FC = () => {
         <div className="flex items-center gap-2 mb-5">
           <Activity size={16} className="text-blue-600" />
           <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">调度器健康</h3>
-          <span className="ml-auto text-[10px] font-bold text-slate-400">来自 sdiag，每 15 秒刷新</span>
+          <span className="ml-auto text-[10px] font-bold text-slate-500">来自 sdiag，每 15 秒刷新</span>
         </div>
         {scheduler?.error ? (
           <p className="text-xs font-bold text-rose-600">sdiag 读取失败：{scheduler.error}</p>
@@ -217,7 +217,7 @@ const ServiceHealth: React.FC = () => {
               ['当前运行 / 等待', `${scheduler.jobs.running} / ${scheduler.jobs.pending}`],
             ] as Array<[string, number | string]>).map(([label, value]) => (
               <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
-                <p className="text-[10px] font-bold text-slate-400">{label}</p>
+                <p className="text-[10px] font-bold text-slate-500">{label}</p>
                 <p className="text-sm font-black text-slate-800">{value}</p>
               </div>
             ))}
@@ -234,23 +234,23 @@ const ServiceHealth: React.FC = () => {
           </div>
           <dl className="space-y-2.5 text-xs">
             <div className="flex justify-between gap-3">
-              <dt className="font-bold text-slate-400">DBD 主机</dt>
+              <dt className="font-bold text-slate-500">DBD 主机</dt>
               <dd className="font-black text-slate-800 text-right">{status?.dbd.config?.accountingHost || '—'}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="font-bold text-slate-400">DBD RPC</dt>
+              <dt className="font-bold text-slate-500">DBD RPC</dt>
               <dd className="font-black text-slate-800">{us(status?.dbd.cluster?.rpcUs)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="font-bold text-slate-400">Rollup 最近</dt>
+              <dt className="font-bold text-slate-500">Rollup 最近</dt>
               <dd className="font-black text-slate-800">{us(status?.dbd.rollup?.lastCycleUs)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="font-bold text-slate-400">Rollup 峰值</dt>
+              <dt className="font-bold text-slate-500">Rollup 峰值</dt>
               <dd className="font-black text-slate-800">{us(status?.dbd.rollup?.maxCycleUs)}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="font-bold text-slate-400">最后运行</dt>
+              <dt className="font-bold text-slate-500">最后运行</dt>
               <dd className="font-bold text-slate-600 text-right">{status?.dbd.rollup?.lastRanAt || '—'}</dd>
             </div>
           </dl>
@@ -274,7 +274,7 @@ const ServiceHealth: React.FC = () => {
           </div>
 
           {!logs ? (
-            <p className="text-xs font-bold text-slate-400 py-6 text-center">加载中…</p>
+            <p className="text-xs font-bold text-slate-500 py-6 text-center">加载中…</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2 mb-4">
@@ -289,11 +289,11 @@ const ServiceHealth: React.FC = () => {
                   <span className="px-3 py-1.5 rounded-lg bg-rose-600 text-[11px] font-black text-white">fatal {logs.byLevel.fatal}</span>
                 )}
                 {logs.coveredFrom && (
-                  <span className="text-[10px] font-bold text-slate-400">
+                  <span className="text-[10px] font-bold text-slate-500">
                     {logs.coveredFrom.slice(11, 19)} – {(logs.coveredTo || '').slice(11, 19)}
                   </span>
                 )}
-                <span className="ml-auto text-[10px] font-bold text-slate-400">{logs.host}</span>
+                <span className="ml-auto text-[10px] font-bold text-slate-500">{logs.host}</span>
               </div>
 
               {logs.topMessages.length > 0 && (
@@ -326,7 +326,7 @@ const ServiceHealth: React.FC = () => {
                     <p className="px-3 py-6 text-center text-xs font-bold text-emerald-600">该时间窗口内没有错误日志</p>
                   ) : logs.recentErrors.slice(0, 20).map((item, idx) => (
                     <div key={`${item.ts}-${idx}`} className="px-3 py-2">
-                      <p className="text-[10px] font-bold text-slate-400 font-mono">{item.ts}</p>
+                      <p className="text-[10px] font-bold text-slate-500 font-mono">{item.ts}</p>
                       <p className="text-[11px] font-mono text-slate-700 break-words">{item.message}</p>
                     </div>
                   ))}
@@ -344,23 +344,23 @@ const ServiceHealth: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
           <div>
-            <p className="font-bold text-slate-400">控制器</p>
+            <p className="font-bold text-slate-500">控制器</p>
             <p className="font-black text-slate-800 mt-1">
               {(status?.dbd.config?.haHosts || []).map((h, i) => `${i === 0 ? 'Primary' : 'Backup'} ${h.host}${h.ip ? ` (${h.ip})` : ''}`).join(' · ') || '—'}
             </p>
           </div>
           <div>
-            <p className="font-bold text-slate-400">集群名</p>
+            <p className="font-bold text-slate-500">集群名</p>
             <p className="font-black text-slate-800 mt-1">{status?.dbd.config?.clusterName || '—'}</p>
           </div>
           <div>
-            <p className="font-bold text-slate-400">状态保存目录</p>
+            <p className="font-bold text-slate-500">状态保存目录</p>
             <p className="font-mono font-bold text-slate-700 mt-1 truncate" title={status?.dbd.config?.stateSaveLocation || ''}>
               {status?.dbd.config?.stateSaveLocation || '—'}
             </p>
           </div>
           <div>
-            <p className="font-bold text-slate-400">当前主控</p>
+            <p className="font-bold text-slate-500">当前主控</p>
             <p className="font-black text-slate-800 mt-1">{status?.controllers.find((c) => c.role === 'primary')?.host || '—'}</p>
           </div>
         </div>

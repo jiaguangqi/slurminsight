@@ -76,7 +76,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
             disabled={isSyncing}
             className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-sm ${
               isSyncing 
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+              ? 'bg-slate-100 text-slate-500 cursor-not-allowed' 
               : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-200'
             }`}
           >
@@ -95,7 +95,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
                 <Cpu size={28} />
               </div>
               <div className="text-right">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">CPU Pool Utilization</p>
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">CPU Pool Utilization</p>
                 <p className="text-4xl font-black text-slate-900">{cpuUtil.toFixed(1)}%</p>
               </div>
             </div>
@@ -122,7 +122,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
                 <Zap size={28} />
               </div>
               <div className="text-right">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">GPU Pool Utilization</p>
+                <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">GPU Pool Utilization</p>
                 <p className="text-4xl font-black text-slate-900">{gpuUtil.toFixed(1)}%</p>
               </div>
             </div>
@@ -148,7 +148,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-              <h3 className="text-lg font-black text-slate-800 tracking-tight">CPU Partitions <span className="text-slate-400 font-medium ml-2">({cpuPartitions.length})</span></h3>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">CPU Partitions <span className="text-slate-500 font-medium ml-2">({cpuPartitions.length})</span></h3>
             </div>
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
@@ -162,7 +162,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-purple-600 rounded-full"></div>
-              <h3 className="text-lg font-black text-slate-800 tracking-tight">GPU Partitions <span className="text-slate-400 font-medium ml-2">({gpuPartitions.length})</span></h3>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">GPU Partitions <span className="text-slate-500 font-medium ml-2">({gpuPartitions.length})</span></h3>
             </div>
           </div>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
@@ -178,12 +178,12 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, jobs, onRefresh, isSyncing
           <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pending Jobs</p>
+                <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Pending Jobs</p>
                 <h3 className="text-xl font-black text-slate-900">{pendingPartition}</h3>
               </div>
               <button
                 onClick={() => setPendingPartition(null)}
-                className="text-slate-400 hover:text-slate-700 rounded-lg p-2 hover:bg-slate-100 transition-colors"
+                className="text-slate-500 hover:text-slate-700 rounded-lg p-2 hover:bg-slate-100 transition-colors"
               >
                 Close
               </button>
