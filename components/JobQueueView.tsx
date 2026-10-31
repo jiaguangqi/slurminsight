@@ -492,26 +492,26 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
               </div>
 
               {/* Log viewer */}
-              <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[520px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-950">
-                <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
-                  <FileText size={14} className="text-slate-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">作业监控</span>
-                  <div className="ml-auto flex bg-slate-900 rounded-lg p-0.5">
+              <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[520px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50">
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2 shrink-0 bg-white">
+                  <FileText size={14} className="text-slate-400" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">作业监控</span>
+                  <div className="ml-auto flex bg-slate-100 rounded-lg p-0.5">
                     <button
                       onClick={() => selectPanel('usage')}
-                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'usage' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'usage' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
                     >
                       资源使用
                     </button>
                     <button
                       onClick={() => selectPanel('out')}
-                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'out' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'out' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'}`}
                     >
                       输出 .out
                     </button>
                     <button
                       onClick={() => selectPanel('err')}
-                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'err' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`px-3 py-1 rounded-md text-[11px] font-black transition-all ${panel === 'err' ? 'bg-rose-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
                     >
                       错误 .err
                     </button>
@@ -522,30 +522,30 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                   <JobUsagePanel jobId={selectedJobId} requestedGpus={selectedJob.gpus || 0} />
                 ) : logStream ? (
                   <>
-                    <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-800 shrink-0">
+                    <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-200 bg-white shrink-0">
                       <button
                         onClick={() => selectedJobId && loadJobLog(selectedJobId, logStream)}
                         disabled={logLoading}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-200 text-[11px] font-black hover:bg-slate-700 disabled:opacity-60"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-600 text-[11px] font-black hover:bg-slate-50 disabled:opacity-60"
                       >
                         <RefreshCw size={11} className={logLoading ? 'animate-spin' : ''} />
                         刷新
                       </button>
                       <button
                         onClick={() => setAutoRefresh((value) => !value)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black transition-all ${autoRefresh ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-black transition-all border ${autoRefresh ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-500'}`}
                         title="每 5 秒自动刷新"
                       >
-                        <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full ${autoRefresh ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                         自动 5s
                       </button>
-                      <span className="ml-auto text-[10px] font-mono text-slate-500">
+                      <span className="ml-auto text-[10px] font-mono text-slate-400">
                         {logData ? `${formatBytes(logData.size)}${logData.truncated ? ' · 尾部' : ''}` : ''}
                       </span>
                     </div>
                     <pre
                       ref={logRef}
-                      className="flex-1 min-h-0 overflow-auto p-4 text-[11px] leading-relaxed font-mono text-slate-200 whitespace-pre-wrap break-words"
+                      className="flex-1 min-h-0 overflow-auto p-4 text-[11px] leading-relaxed font-mono text-slate-700 whitespace-pre-wrap break-words"
                     >
                       {logError
                         ? `读取失败：${logError}`
@@ -553,15 +553,15 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
                           ? (logData.exists ? (logData.content || '（文件为空）') : '（日志文件尚未生成）')
                           : '加载中…'}
                     </pre>
-                    <div className="px-4 py-2 border-t border-slate-800 text-[10px] font-mono text-slate-600 truncate shrink-0" title={logData?.path || ''}>
+                    <div className="px-4 py-2 border-t border-slate-200 bg-white text-[10px] font-mono text-slate-400 truncate shrink-0" title={logData?.path || ''}>
                       {logData?.path || '—'}
                     </div>
                   </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500 px-6 text-center">
-                    <Terminal size={28} className="text-slate-700" />
-                    <p className="text-xs font-black">选择一个日志查看</p>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">输出日志 / 错误日志，打开后每 5 秒自动刷新，也可手动刷新。</p>
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-400 px-6 text-center">
+                    <Terminal size={28} className="text-slate-300" />
+                    <p className="text-xs font-black text-slate-500">选择一个日志查看</p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">输出日志 / 错误日志，打开后每 5 秒自动刷新，也可手动刷新。</p>
                   </div>
                 )}
               </div>

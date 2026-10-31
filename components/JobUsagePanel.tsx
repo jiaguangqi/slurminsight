@@ -37,7 +37,12 @@ const formatBytes = (bytes: number | null) => {
 const formatCores = (value: number | null) => (value === null || value === undefined ? '—' : value.toFixed(1));
 const formatPercent = (value: number | null) => (value === null || value === undefined ? '—' : `${value.toFixed(1)}%`);
 
-const GPU_COLORS = ['#34d399', '#f472b6', '#fbbf24', '#60a5fa', '#c084fc', '#f87171', '#2dd4bf', '#a3e635'];
+// 浅色主题下的曲线配色：比深色底时各暗一档，保证白底上的对比度
+const GPU_COLORS = ['#10b981', '#ec4899', '#f59e0b', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6', '#84cc16'];
+
+const TOOLTIP_STYLE = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 11 };
+const TOOLTIP_LABEL_STYLE = { color: '#64748b' };
+const AXIS_TICK = { fill: '#94a3b8', fontSize: 9 };
 
 const chartTime = (ts: number) => {
   const date = new Date(ts);
@@ -91,16 +96,16 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
     : null;
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-slate-950">
-      <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-800 shrink-0">
-        <Activity size={12} className="text-slate-500" />
-        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">时间范围</span>
-        <div className="flex bg-slate-900 rounded-lg p-0.5">
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="px-4 py-2 flex items-center gap-2 border-b border-slate-200 shrink-0">
+        <Activity size={12} className="text-slate-400" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">时间范围</span>
+        <div className="flex bg-slate-100 rounded-lg p-0.5">
           {RANGES.map((range) => (
             <button
               key={range.seconds}
               onClick={() => setRangeSeconds(range.seconds)}
-              className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all ${rangeSeconds === range.seconds ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-black transition-all ${rangeSeconds === range.seconds ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               {range.label}
             </button>
@@ -109,7 +114,7 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
         <button
           onClick={() => load()}
           disabled={loading}
-          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-md bg-slate-800 text-slate-300 text-[10px] font-black hover:bg-slate-700 disabled:opacity-60"
+          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-600 text-[10px] font-black hover:bg-slate-50 disabled:opacity-60"
         >
           <RefreshCw size={10} className={loading ? 'animate-spin' : ''} />
           刷新
@@ -118,104 +123,104 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {error && (
-          <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[11px] font-bold text-rose-300">
+          <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-[11px] font-bold text-rose-700">
             读取失败：{error}
           </div>
         )}
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-3">
-            <div className="flex items-center gap-1.5 text-slate-500">
+          <div className="rounded-xl bg-white border border-slate-100 p-3">
+            <div className="flex items-center gap-1.5 text-slate-400">
               <Cpu size={11} />
               <span className="text-[9px] font-black uppercase tracking-widest">CPU</span>
             </div>
-            <p className="mt-1.5 text-lg font-black text-slate-100 leading-none">
+            <p className="mt-1.5 text-lg font-black text-slate-900 leading-none">
               {formatCores(cpu?.current ?? null)}
-              <span className="text-[10px] font-bold text-slate-500 ml-1">/ {cpu?.allocated ?? '—'} 核</span>
+              <span className="text-[10px] font-bold text-slate-400 ml-1">/ {cpu?.allocated ?? '—'} 核</span>
             </p>
-            <p className="mt-1 text-[10px] font-bold text-slate-500">
+            <p className="mt-1 text-[10px] font-bold text-slate-400">
               均值 {formatCores(cpu?.average ?? null)} · 峰值 {formatCores(cpu?.peak ?? null)}
             </p>
-            <p className={`mt-0.5 text-[10px] font-black ${cpuPercent !== null && cpuPercent > 75 ? 'text-emerald-400' : 'text-amber-400'}`}>
+            <p className={`mt-0.5 text-[10px] font-black ${cpuPercent !== null && cpuPercent > 75 ? 'text-emerald-600' : 'text-amber-600'}`}>
               {formatPercent(cpuPercent)} 的实际占用率
             </p>
           </div>
 
-          <div className="rounded-xl bg-slate-900 border border-slate-800 p-3">
-            <div className="flex items-center gap-1.5 text-slate-500">
+          <div className="rounded-xl bg-white border border-slate-100 p-3">
+            <div className="flex items-center gap-1.5 text-slate-400">
               <HardDrive size={11} />
               <span className="text-[9px] font-black uppercase tracking-widest">内存</span>
             </div>
-            <p className="mt-1.5 text-lg font-black text-slate-100 leading-none">
+            <p className="mt-1.5 text-lg font-black text-slate-900 leading-none">
               {formatBytes(memory?.peak ?? null)}
-              <span className="text-[10px] font-bold text-slate-500 ml-1">峰值</span>
+              <span className="text-[10px] font-bold text-slate-400 ml-1">峰值</span>
             </p>
-            <p className="mt-1 text-[10px] font-bold text-slate-500">
+            <p className="mt-1 text-[10px] font-bold text-slate-400">
               申请 {formatBytes(memory?.requestedBytes ?? null)}
             </p>
-            <p className="mt-0.5 text-[10px] font-black text-sky-400">
+            <p className="mt-0.5 text-[10px] font-black text-blue-600">
               用掉申请的 {formatPercent(memoryPercent)}
             </p>
           </div>
         </div>
 
         <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1.5">CPU 实际使用（核）</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">CPU 实际使用（核）</p>
           <div className="h-32 w-full">
             {hasCpuSeries ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={series} margin={{ top: 4, right: 6, left: -22, bottom: 0 }}>
                   <defs>
                     <linearGradient id="jobCpuFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                  <XAxis dataKey="ts" tickFormatter={chartTime} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={40} />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} width={44} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
                     labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
                     formatter={(value: any) => [`${Number(value).toFixed(1)} 核`, '实际']}
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, fontSize: 11 }}
-                    labelStyle={{ color: '#94a3b8' }}
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
                   />
-                  {cpu?.allocated ? <ReferenceLine y={cpu.allocated} stroke="#475569" strokeDasharray="5 4" /> : null}
-                  <Area type="monotone" dataKey="cpuCores" stroke="#38bdf8" strokeWidth={1.8} fill="url(#jobCpuFill)" isAnimationActive={false} connectNulls />
+                  {cpu?.allocated ? <ReferenceLine y={cpu.allocated} stroke="#cbd5e1" strokeDasharray="5 4" /> : null}
+                  <Area type="monotone" dataKey="cpuCores" stroke="#0ea5e9" strokeWidth={1.8} fill="url(#jobCpuFill)" isAnimationActive={false} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-600">暂无 CPU 采样数据</div>
+              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无 CPU 采样数据</div>
             )}
           </div>
         </div>
 
         <div>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1.5">内存实际使用</p>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">内存实际使用</p>
           <div className="h-32 w-full">
             {hasMemorySeries ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={series} margin={{ top: 4, right: 6, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="jobMemFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.28} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                  <XAxis dataKey="ts" tickFormatter={chartTime} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={40} />
-                  <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} width={44} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
+                  <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                   <Tooltip
                     labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
                     formatter={(value: any) => [formatBytes(Number(value)), '实际']}
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, fontSize: 11 }}
-                    labelStyle={{ color: '#94a3b8' }}
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
                   />
-                  <Area type="monotone" dataKey="memoryBytes" stroke="#a78bfa" strokeWidth={1.8} fill="url(#jobMemFill)" isAnimationActive={false} connectNulls />
+                  <Area type="monotone" dataKey="memoryBytes" stroke="#8b5cf6" strokeWidth={1.8} fill="url(#jobMemFill)" isAnimationActive={false} connectNulls />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-600">暂无内存采样数据</div>
+              <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无内存采样数据</div>
             )}
           </div>
         </div>
@@ -223,23 +228,23 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
         {(gpus.length > 0 || requestedGpus > 0) && (
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
-              <Zap size={11} className="text-slate-500" />
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+              <Zap size={11} className="text-slate-400" />
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                 GPU（设备利用率）{requestedGpus > 0 ? `· 监控映射 ${gpus.length} / 申请 ${requestedGpus}` : ''}
               </p>
             </div>
             {gpus.length === 0 && (
-              <p className="text-[10px] font-bold text-slate-500 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2">
+              <p className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg px-2.5 py-2">
                 监控数据中未找到该作业的 GPU 映射（作业可能刚启动，或该节点的 GPU 未上报作业归属）。
               </p>
             )}
             <div className="space-y-1">
               {gpus.map((gpu) => (
-                <div key={`${gpu.hostname}-${gpu.gpu}`} className="flex items-center justify-between rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5">
-                  <span className="text-[10px] font-mono font-bold text-slate-300">{gpu.hostname} / GPU {gpu.gpu}</span>
+                <div key={`${gpu.hostname}-${gpu.gpu}`} className="flex items-center justify-between rounded-lg bg-white border border-slate-100 px-2.5 py-1.5">
+                  <span className="text-[10px] font-mono font-bold text-slate-700">{gpu.hostname} / GPU {gpu.gpu}</span>
                   <span className="flex items-center gap-3 text-[10px] font-black">
-                    <span className="text-emerald-400">{formatPercent(gpu.utilization)}</span>
-                    <span className="text-slate-500">{formatBytes(gpu.memoryBytes)}</span>
+                    <span className="text-emerald-600">{formatPercent(gpu.utilization)}</span>
+                    <span className="text-slate-400">{formatBytes(gpu.memoryBytes)}</span>
                   </span>
                 </div>
               ))}
@@ -251,20 +256,20 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
           <>
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap size={11} className="text-slate-500" />
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">GPU 利用率曲线</p>
+                <Zap size={11} className="text-slate-400" />
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">GPU 利用率曲线</p>
               </div>
               <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={gpuUtilSeries} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                    <XAxis dataKey="ts" tickFormatter={chartTime} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={40} />
-                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(value) => `${value}%`} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} width={40} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
+                    <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={(value) => `${value}%`} tick={AXIS_TICK} axisLine={false} tickLine={false} width={40} />
                     <Tooltip
                       labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
                       formatter={(value: any, name: any) => [`${Number(value).toFixed(0)}%`, name]}
-                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, fontSize: 11 }}
-                      labelStyle={{ color: '#94a3b8' }}
+                      contentStyle={TOOLTIP_STYLE}
+                      labelStyle={TOOLTIP_LABEL_STYLE}
                     />
                     <Legend wrapperStyle={{ fontSize: 9 }} />
                     {gpuDevices.map((device, index) => (
@@ -277,21 +282,21 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
 
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap size={11} className="text-slate-500" />
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">GPU 显存曲线（作业占用）</p>
+                <Zap size={11} className="text-slate-400" />
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">GPU 显存曲线（作业占用）</p>
               </div>
               <div className="h-32 w-full">
                 {hasGpuMemorySeries ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={gpuMemorySeries} margin={{ top: 4, right: 6, left: 2, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
-                      <XAxis dataKey="ts" tickFormatter={chartTime} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={40} />
-                      <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} width={44} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="ts" tickFormatter={chartTime} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} />
+                      <YAxis tickFormatter={(value) => formatBytesCompact(Number(value))} tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} />
                       <Tooltip
                         labelFormatter={(value) => new Date(Number(value)).toLocaleString()}
                         formatter={(value: any, name: any) => [formatBytes(Number(value)), name]}
-                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: 10, fontSize: 11 }}
-                        labelStyle={{ color: '#94a3b8' }}
+                        contentStyle={TOOLTIP_STYLE}
+                        labelStyle={TOOLTIP_LABEL_STYLE}
                       />
                       <Legend wrapperStyle={{ fontSize: 9 }} />
                       {gpuDevices.map((device, index) => (
@@ -300,14 +305,14 @@ const JobUsagePanel: React.FC<JobUsagePanelProps> = ({ jobId, requestedGpus = 0,
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-600">暂无显存采样数据</div>
+                  <div className="h-full flex items-center justify-center text-[10px] font-bold text-slate-400">暂无显存采样数据</div>
                 )}
               </div>
             </div>
           </>
         )}
 
-        <p className="text-[9px] font-bold text-slate-600 leading-relaxed pt-1">
+        <p className="text-[9px] font-bold text-slate-400 leading-relaxed pt-1">
           CPU 由 cgroup 累计时间换算为核数，内存为 cgroup 实际占用；申请值来自 Slurm 请求。GPU 利用率为整卡设备指标，显存为作业级统计。数据每 10 秒刷新。
         </p>
       </div>
