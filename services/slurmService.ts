@@ -11,6 +11,10 @@ export interface JobUsagePoint {
   ts: number;
   cpuCores: number | null;
   memoryBytes: number | null;
+  ethRx: number | null;
+  ethTx: number | null;
+  ibRx: number | null;
+  ibTx: number | null;
 }
 
 export interface JobUsageGpu {
@@ -18,6 +22,8 @@ export interface JobUsageGpu {
   gpu: string;
   utilization: number | null;
   memoryBytes: number | null;
+  memoryTotalBytes: number | null;
+  fbUsedBytes: number | null;
 }
 
 export interface JobUsage {
@@ -36,6 +42,17 @@ export interface JobUsage {
   gpuDevices: Array<{ key: string; label: string }>;
   gpuUtilSeries: Array<{ ts: number; [key: string]: number | null }>;
   gpuMemorySeries: Array<{ ts: number; [key: string]: number | null }>;
+  gpuMemoryPctSeries: Array<{ ts: number; [key: string]: number | null }>;
+  network: {
+    level: 'node';
+    nodes: string[];
+    hasEth: boolean;
+    hasIb: boolean;
+    ethRxPeak: number | null;
+    ethTxPeak: number | null;
+    ibRxPeak: number | null;
+    ibTxPeak: number | null;
+  };
   series: JobUsagePoint[];
   source: string;
 }
@@ -603,6 +620,17 @@ class SlurmService {
         gpuDevices: [],
         gpuUtilSeries: [],
         gpuMemorySeries: [],
+        gpuMemoryPctSeries: [],
+        network: {
+          level: 'node',
+          nodes: [],
+          hasEth: false,
+          hasIb: false,
+          ethRxPeak: null,
+          ethTxPeak: null,
+          ibRxPeak: null,
+          ibTxPeak: null,
+        },
         series: [],
         source: 'mock',
       };

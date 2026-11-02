@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **作业详情的性能面板扩展**：弹窗宽度从 `max-w-6xl`（1152px）扩到 96rem，右侧「作业监控」栏 520px → 720/820px，
+  指标区改为 6 个卡片，覆盖
+  - CPU 利用率（实际 ÷ 申请核数）与内存利用率（实际 ÷ 申请内存），曲线纵轴直接读成百分比，虚线为 100% 申请基准；
+  - 以太网网络 IO、IB 网络 IO（下行 / 上行双线）；
+  - GPU 利用率、GPU 显存利用率（仅申请了 GPU 的作业显示）。
+- **网络与显存利用率数据**（`/api/jobs/:jobId/usage` 扩展）：
+  - 新增 `series.ethRx/ethTx/ibRx/ibTx` 与 `network` 元信息。cgroup exporter **不提供**作业级网络计数，
+    因此取作业所在节点的 `node_network_*_bytes_total`：以太网按 `device=~"en.*|eth.*"`、
+    IB 按 `device=~"ib.*"`（集群里 IB 口既有 `ib0` 也有 `ibp25s0`/`ibs5` 这类 RDMA 命名），多节点作业求和。
+    面板上明确标注为「节点级」。
+  - 新增 `gpuMemoryPctSeries`：显存利用率 = `FB_USED / (FB_USED + FB_FREE)`（DCGM 没有 FB_TOTAL 指标，
+    用两者相加还原单卡总量），并在 GPU 卡片里给出已用 / 总共。
+
 ### 变更
 
 - **作业详情弹窗的「作业监控」改为浅色**：右栏（标题栏、资源使用图表、`.out` / `.err` 日志）此前是终端风格的深色，

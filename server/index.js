@@ -1666,18 +1666,22 @@ const fetchJobGpuTargets = async (jobId) => {  const mappings = await vmFetch('/
 };
 
 const fetchJobGpuUsage = async (jobId, targets) => {
+  const FB_MIB = 1024 * 1024;
   const gpus = await Promise.all(targets.slice(0, 16).map(async ({ hostname, gpu }) => {
-    const [util, jobMemory] = await Promise.all([
+    const [util, jobMemory, fbUsed, fbFree] = await Promise.all([
       vmInstant(`DCGM_FI_DEV_GPU_UTIL{hostname="${hostname}",gpu="${gpu}"}`).catch(() => null),
       vmInstant(`sum(node_cr_job_gpu_memory{job_id="${jobId}",gpu="${gpu}"})`).catch(() => null),
+      vmInstant(`DCGM_FI_DEV_FB_USED{hostname="${hostname}",gpu="${gpu}"}`).catch(() => null),
+      vmInstant(`DCGM_FI_DEV_FB_FREE{hostname="${hostname}",gpu="${gpu}"}`).catch(() => null),
     ]);
-    return { hostname, gpu, utilization: util, memoryBytes: jobMemory };
+    const memoryTotalBytes = fbUsed !== null && fbFree !== null ? (fbUsed + fbFree) * FB_MIB : null;
+    return { hostname, gpu, utilization: util, memoryBytes: jobMemory, memoryTotalBytes, fbUsedBytes: fbUsed === null ? null : fbUsed * FB_MIB };
   }));
   return gpus;
 };
 
 const fetchJobGpuSeries = async (jobId, targets, start, end, step) => {
-  if (!targets.length) return { devices: [], util: [], memory: [] };
+  if (!targets.length) return { devices: [], util: [], memory: [], memoryPct: [] };
   const devices = targets.slice(0, 8).map((target, index) => ({
     key: `g${index}`,
     label: `${target.hostname} / GPU ${target.gpu}`,
@@ -1690,13 +1694,20 @@ const fetchJobGpuSeries = async (jobId, targets, start, end, step) => {
     byHost.get(device.hostname).push(device.gpu);
   });
 
-  const [utilBatches, memorySeries] = await Promise.all([
+  // FB_USED / FB_FREE 是每卡显存明细（MiB），两者相加即该卡总显存，用来算显存利用率。
+  const [utilBatches, memorySeries, fbBatches] = await Promise.all([
     Promise.all(Array.from(byHost.entries()).map(([hostname, gpus]) =>
       vmRangeSeries(`DCGM_FI_DEV_GPU_UTIL{hostname="${hostname}",gpu=~"${gpus.join('|')}"}`, start, end, step)
         .then((rows) => ({ hostname, rows }))
         .catch(() => ({ hostname, rows: [] }))
     )),
     vmRangeSeries(`sum by (gpu) (node_cr_job_gpu_memory{job_id="${jobId}"})`, start, end, step).catch(() => []),
+    Promise.all(Array.from(byHost.entries()).map(([hostname, gpus]) =>
+      Promise.all([
+        vmRangeSeries(`DCGM_FI_DEV_FB_USED{hostname="${hostname}",gpu=~"${gpus.join('|')}"}`, start, end, step).catch(() => []),
+        vmRangeSeries(`DCGM_FI_DEV_FB_FREE{hostname="${hostname}",gpu=~"${gpus.join('|')}"}`, start, end, step).catch(() => []),
+      ]).then(([used, free]) => ({ hostname, used, free }))
+    )),
   ]);
 
   const rows = new Map();
@@ -1725,10 +1736,38 @@ const fetchJobGpuSeries = async (jobId, targets, start, end, step) => {
     });
   }
 
+  // 显存利用率：FB_USED / (FB_USED + FB_FREE)，按卡归属到 device.key
+  const pctRows = new Map();
+  const ensurePct = (ts) => {
+    if (!pctRows.has(ts)) pctRows.set(ts, { ts });
+    return pctRows.get(ts);
+  };
+  fbBatches.forEach(({ hostname, used, free }) => {
+    const freeByKey = new Map();
+    free.forEach((series) => {
+      const gpu = series.metric?.gpu;
+      const device = devices.find((item) => item.hostname === hostname && item.gpu === gpu);
+      if (!device) return;
+      freeByKey.set(gpu, { key: device.key, points: new Map(series.points.map((p) => [p.ts, p.value])) });
+    });
+    used.forEach((series) => {
+      const gpu = series.metric?.gpu;
+      const entry = freeByKey.get(gpu);
+      if (!entry) return;
+      series.points.forEach((point) => {
+        const freeValue = entry.points.get(point.ts);
+        const total = point.value + (freeValue ?? 0);
+        if (!Number.isFinite(total) || total <= 0) return;
+        ensurePct(point.ts)[`${entry.key}mp`] = (point.value / total) * 100;
+      });
+    });
+  });
+
   return {
     devices: devices.map(({ key, label }) => ({ key, label })),
     util: Array.from(rows.values()).sort((a, b) => a.ts - b.ts),
     memory: Array.from(rows.values()).sort((a, b) => a.ts - b.ts),
+    memoryPct: Array.from(pctRows.values()).sort((a, b) => a.ts - b.ts),
   };
 };
 
@@ -1754,7 +1793,21 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
     const selector = `jobId="${jobId}"`;
 
     const gpuTargets = await fetchJobGpuTargets(jobId).catch(() => []);
-    const [cpuPoints, memoryPoints, rssPoints, allocatedCpus, gpus, gpuSeries] = await Promise.all([
+
+    // 作业本身没有网络计数器（cgroup exporter 不提供 net 指标），只能取作业所在节点的网卡流量。
+    // node_exporter 在计算节点上同时暴露业务以太网（enp*/eno*/ens*）与 IB（ib0/ib1…），按设备名区分。
+    const jobNodes = (job.nodesExpanded && job.nodesExpanded.length ? job.nodesExpanded : String(job.nodelist || '').split(/[,;]/))
+      .map((name) => String(name).trim())
+      .filter((name) => NODE_NAME_RE.test(name));
+    const nodeIps = await loadNodeIps().catch(() => new Map());
+    const netTargets = jobNodes.flatMap((name) => (nodeIps.get(name) || []).map((ip) => `${ip}:${NODE_EXPORTER_PORT}`));
+    const netSel = netTargets.length ? `instance=~"${netTargets.join('|')}"` : null;
+    // 网卡命名不统一：以太网有 eno*/ens*/enp*/eth*，IB 有 ib0/ib1 与 RDMA 命名 ibp25s0/ibs5。
+    // 用前缀匹配而不是固定白名单，避免漏掉某批机器的命名风格。
+    const ETH_DEVICES = 'device=~"en.*|eth.*"';
+    const IB_DEVICES = 'device=~"ib.*"';
+
+    const [cpuPoints, memoryPoints, rssPoints, allocatedCpus, gpus, gpuSeries, ethRx, ethTx, ibRx, ibTx] = await Promise.all([
       vmRange(`sum(rate(cgroup_cpu_usage_percpu{${selector}}[2m]))/1e9`, start, end, step)
         // 部分节点的 cgroup exporter 不提供 per-cpu 指标，回退到累计秒数（单位即核数）
         .then((points) => (points.length ? points : vmRange(`sum(rate(cgroup_cpu_total_seconds{${selector}}[2m]))`, start, end, step)))
@@ -1763,7 +1816,11 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
       vmRange(`sum(cgroup_memory_rss_bytes{${selector}})`, start, end, step).catch(() => []),
       vmInstant(`max(cgroup_cpus{${selector}})`).catch(() => null),
       fetchJobGpuUsage(jobId, gpuTargets).catch(() => []),
-      fetchJobGpuSeries(jobId, gpuTargets, start, end, step).catch(() => ({ devices: [], util: [], memory: [] })),
+      fetchJobGpuSeries(jobId, gpuTargets, start, end, step).catch(() => ({ devices: [], util: [], memory: [], memoryPct: [] })),
+      netSel ? vmRange(`sum(rate(node_network_receive_bytes_total{${netSel},${ETH_DEVICES}}[2m]))`, start, end, step).catch(() => []) : [],
+      netSel ? vmRange(`sum(rate(node_network_transmit_bytes_total{${netSel},${ETH_DEVICES}}[2m]))`, start, end, step).catch(() => []) : [],
+      netSel ? vmRange(`sum(rate(node_network_receive_bytes_total{${netSel},${IB_DEVICES}}[2m]))`, start, end, step).catch(() => []) : [],
+      netSel ? vmRange(`sum(rate(node_network_transmit_bytes_total{${netSel},${IB_DEVICES}}[2m]))`, start, end, step).catch(() => []) : [],
     ]);
 
     const cpuStats = summarizeSeries(cpuPoints);
@@ -1772,11 +1829,16 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
     const requestedMemory = parseRequestedMemoryBytes(job.reqTres || job.memory || '');
 
     const bucket = new Map();
-    [...cpuPoints, ...memoryPoints].forEach((point) => {
-      if (!bucket.has(point.ts)) bucket.set(point.ts, { ts: point.ts, cpuCores: null, memoryBytes: null });
+    [...cpuPoints, ...memoryPoints, ...ethRx, ...ethTx, ...ibRx, ...ibTx].forEach((point) => {
+      if (!bucket.has(point.ts)) bucket.set(point.ts, { ts: point.ts, cpuCores: null, memoryBytes: null, ethRx: null, ethTx: null, ibRx: null, ibTx: null });
     });
     cpuPoints.forEach((point) => { bucket.get(point.ts).cpuCores = point.value; });
     memoryPoints.forEach((point) => { bucket.get(point.ts).memoryBytes = point.value; });
+    const assign = (points, key) => points.forEach((point) => { bucket.get(point.ts)[key] = point.value; });
+    assign(ethRx, 'ethRx');
+    assign(ethTx, 'ethTx');
+    assign(ibRx, 'ibRx');
+    assign(ibTx, 'ibTx');
     const series = Array.from(bucket.values()).sort((a, b) => a.ts - b.ts);
 
     res.json({
@@ -1796,6 +1858,17 @@ app.get('/api/jobs/:jobId/usage', requireAuth, async (req, res) => {
       gpuDevices: gpuSeries.devices,
       gpuUtilSeries: gpuSeries.util,
       gpuMemorySeries: gpuSeries.memory,
+      gpuMemoryPctSeries: gpuSeries.memoryPct,
+      network: {
+        level: 'node',
+        nodes: jobNodes,
+        hasEth: ethRx.length > 0 || ethTx.length > 0,
+        hasIb: ibRx.length > 0 || ibTx.length > 0,
+        ethRxPeak: ethRx.length ? Math.max(...ethRx.map((p) => p.value)) : null,
+        ethTxPeak: ethTx.length ? Math.max(...ethTx.map((p) => p.value)) : null,
+        ibRxPeak: ibRx.length ? Math.max(...ibRx.map((p) => p.value)) : null,
+        ibTxPeak: ibTx.length ? Math.max(...ibTx.map((p) => p.value)) : null,
+      },
       series,
       source: VM_URL,
     });

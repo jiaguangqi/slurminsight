@@ -443,7 +443,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
       {/* Detail Modal */}
       {selectedJob && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-6xl h-[88vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 border border-slate-200">
+          <div className="bg-white w-full max-w-[96rem] h-[92vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 border border-slate-200">
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-2xl ${selectedJob.state === 'RUNNING' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
@@ -463,7 +463,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
             </div>
 
             <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-              <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-8 flex flex-col gap-4">
+              <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-8 flex flex-col gap-4 xl:max-w-[760px]">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 shrink-0">
                   <DetailRow label="作业名" value={selectedJob.name} />
                   <DetailRow label="作业ID" value={selectedJob.jobId} />
@@ -492,7 +492,7 @@ const JobQueueView: React.FC<JobQueueViewProps> = ({ jobs }) => {
               </div>
 
               {/* Log viewer */}
-              <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[520px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50">
+              <div className="flex flex-col flex-1 lg:flex-none min-h-0 w-full lg:w-[720px] xl:w-[820px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-slate-50">
                 <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2 shrink-0 bg-white">
                   <FileText size={14} className="text-slate-500" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">作业监控</span>
