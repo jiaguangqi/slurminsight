@@ -11,7 +11,7 @@
 | Dashboard | CPU/GPU 分区资源卡片、整体利用率、待排队作业数；点卡片右上角可查看该分区的节点与每张 GPU 卡的分配情况；等待作业弹窗含优先级列 |
 | Node Heatmap | 全节点状态与资源热力图；另有 CPU 热度 / 内存热度 / 磁盘热度三个视角（可按节点名或用量排序），方块下方红点标记采集缺失，点击任意节点弹出详情 |
 | 节点详情 | CPU / 内存 / 负载 / 根目录 / 网络的时间曲线，GPU 节点含逐卡利用率与显存，以及该节点上运行中作业的实际 CPU / 内存 / GPU 占用 |
-| Job Queue | 作业列表、按状态/分区筛选、按优先级排序、作业详情与脚本、运行期资源使用；含「资源利用率」列（申请 vs 实际，可排序） |
+| Job Queue | 作业列表、按状态/分区筛选、按优先级排序、作业详情与脚本、运行期资源使用；含「资源利用率」列（申请 vs 实际，可排序）。作业详情弹窗右侧为浅色监控栏，展示 CPU / 内存利用率、以太网与 IB 网络 IO、GPU 利用率与显存利用率（节点级网络已明确标注），下方附 `.out` / `.err` 日志 |
 | History Trends | 分区与作业历史趋势，按 1H/6H/24H/7D 时间窗由服务端聚合 |
 | Service Health | 双控 HA 状态（slurmctld / slurmdbd / munge）、`sdiag` 调度指标、数据库汇总、控制器日志分级与错误归类 |
 | Configuration | 管理员配置 LDAP、数据库、采集间隔与保留期、用户与分区权限 |
@@ -73,4 +73,4 @@ npm start            # 启动 Express（静态资源 + API），默认 0.0.0.0:4
 ## 文档
 
 - [DEPLOY.md](DEPLOY.md)：部署、systemd、logrotate、Service Health 前置条件
-- [CHANGELOG.md](CHANGELOG.md)：版本变更记录（当前 v2.1.0）
+- [CHANGELOG.md](CHANGELOG.md)：版本变更记录（当前 v2.2.0）
